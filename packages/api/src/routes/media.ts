@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import {
   createMediaSource,
+  getVideoFilterOptions,
   getNextVideoFile, createMediaCollection, deleteMediaCollection, updateMediaCollection, listMediaCollections, getVideoHome, getVideoTitle, listVideoTitles, saveMediaState, saveEpisodeWatched,
   defaultMediaLibrarySettings,
   deleteMediaSource,
@@ -184,6 +185,7 @@ export function registerMediaRoutes(
   server.get<{ Params: { id: string } }>("/api/media/files/:id/next", async request => ({ next: getNextVideoFile(db, request.params.id) }));
   server.get("/api/media/status", async () => ({ status: getMediaLibraryStatus(db) }));
   server.get("/api/media/home", async () => getVideoHome(db));
+  server.get("/api/media/filter-options", async () => getVideoFilterOptions(db));
   server.patch<{ Params: { id: string }; Body: Partial<MediaPersonalState> }>("/api/media/titles/:id/state", async (request, reply) => {
     try { return { state: saveMediaState(db, request.params.id, request.body) }; } catch (e) { sendMediaError(reply, e, "Invalid state"); }
   });

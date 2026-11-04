@@ -43,6 +43,12 @@ const status: VodPlayerStatus = {
 };
 
 describe("VOD player broker protocol", () => {
+  it("preserves an optional native Home request and rejects malformed requests", () => {
+    const frame = (value: unknown) => parseVodPlayerBrokerResponse(JSON.stringify({ version: VOD_PLAYER_PROTOCOL_VERSION, id: "home", ok: true, status: { ...status, tvHomeRequestId: value } }));
+    expect(frame("request-1")).toMatchObject({ ok: true, status: { tvHomeRequestId: "request-1" } });
+    expect(frame(undefined)).toMatchObject({ ok: true, status });
+    for (const invalid of [null, "", 42, "\n"]) expect(frame(invalid)).toBeNull();
+  });
   it("round-trips a versioned play request and status response", () => {
     const request = parseVodPlayerBrokerRequest(
       encodeVodPlayerBrokerMessage({

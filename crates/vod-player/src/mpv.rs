@@ -52,6 +52,7 @@ impl Availability {
 #[derive(Debug)]
 pub enum MpvEvent {
     FileLoaded,
+    TvHome,
     EndFile {
         reason: String,
         error: Option<String>,
@@ -255,9 +256,28 @@ impl MpvHandle {
         let stream = UnixStream::from_std(stream)?;
         let (reader, writer) = tokio::io::split(stream);
         let (incoming_tx, incoming) = mpsc::channel(128);
-        tokio::spawn(read_ipc(reader, incoming_tx.clone()));
+        let mut ipc_reader = tokio::spawn(read_ipc(reader, incoming_tx.clone()));
         tokio::spawn(async move {
-            let status = child.wait().await;
+            let mut ipc_done = false;
+            let status = tokio::select! {
+                status = child.wait() => status,
+                result = &mut ipc_reader => {
+                    ipc_done = true;
+                    match timeout(Duration::from_millis(250), child.wait()).await {
+                        Ok(status) => status,
+                        Err(_) => {
+                            let message = result.unwrap_or("mpv IPC reader failed");
+                            let _ = incoming_tx.send(Incoming::Event(MpvEvent::ProtocolFailure(message.to_owned()))).await;
+                            child.wait().await
+                        }
+                    }
+                }
+            };
+            // Drain ordered IPC intents before the process-exit event can end the session.
+            if !ipc_done {
+                let _ = timeout(Duration::from_secs(1), &mut ipc_reader).await;
+            }
+            ipc_reader.abort();
             let (code, signal) = match status {
                 Ok(status) => (status.code(), status.signal()),
                 Err(_) => (None, None),
@@ -700,7 +720,7 @@ fn dup2_for_exec(source: RawFd, target: RawFd) -> std::io::Result<()> {
     Ok(())
 }
 
-async fn read_ipc(reader: ReadHalf<UnixStream>, sender: mpsc::Sender<Incoming>) {
+async fn read_ipc(reader: ReadHalf<UnixStream>, sender: mpsc::Sender<Incoming>) -> &'static str {
     let mut reader = reader;
     let mut pending = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 4096];
@@ -743,25 +763,12 @@ async fn read_ipc(reader: ReadHalf<UnixStream>, sender: mpsc::Sender<Incoming>) 
             break;
         }
         match reader.read(&mut chunk).await {
-            Ok(0) => {
-                let _ = sender
-                    .send(Incoming::Event(MpvEvent::ProtocolFailure(
-                        "mpv IPC closed unexpectedly".to_owned(),
-                    )))
-                    .await;
-                break;
-            }
-            Err(_) => {
-                let _ = sender
-                    .send(Incoming::Event(MpvEvent::ProtocolFailure(
-                        "mpv IPC read failed".to_owned(),
-                    )))
-                    .await;
-                break;
-            }
+            Ok(0) => return "mpv IPC closed unexpectedly",
+            Err(_) => return "mpv IPC read failed",
             Ok(count) => pending.extend_from_slice(&chunk[..count]),
         }
     }
+    "mpv IPC frame is too large"
 }
 
 async fn handle_ipc_line(line: &str, sender: &mpsc::Sender<Incoming>) {
@@ -792,6 +799,9 @@ async fn handle_ipc_line(line: &str, sender: &mpsc::Sender<Incoming>) {
     }
     let event = match value.get("event").and_then(Value::as_str) {
         Some("file-loaded") => Some(MpvEvent::FileLoaded),
+        Some("client-message") if value.get("args") == Some(&json!(["cyberos-tv-home"])) => {
+            Some(MpvEvent::TvHome)
+        }
         Some("end-file") => Some(MpvEvent::EndFile {
             reason: value
                 .get("reason")
@@ -958,6 +968,10 @@ while IFS= read -r line <&5; do
   [ -n "$request_id" ] || continue
   printf '%s\n' '{"event":"property-change","name":"time-pos","data":12}' >&6
   case "$line" in
+    *'"tv-home-exit"'*)
+      printf '{"request_id":%s,"error":"success","data":null}\n' "$request_id" >&6
+      printf '%s\n' '{"event":"client-message","args":["cyberos-tv-home"]}' >&6
+      exit 0 ;;
     *'"verify-tv-controls"'*)
       if [ -n "$controls_path" ] && [ -r "$controls_path" ]; then
         printf '{"request_id":%s,"error":"success","data":true}\n' "$request_id" >&6
@@ -1140,6 +1154,76 @@ done
             )
         );
         handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn tv_home_intent_is_delivered_before_a_clean_process_exit() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = fake_mpv(directory.path());
+        let mut handle = MpvHandle::start_with_executable(
+            &config(directory.path()),
+            media(directory.path()),
+            0.0,
+            80.0,
+            false,
+            None,
+            executable.as_os_str(),
+        )
+        .await
+        .unwrap();
+        handle.command(json!(["tv-home-exit"])).await.unwrap();
+        let mut events = Vec::new();
+        timeout(Duration::from_secs(2), async {
+            loop {
+                events.extend(handle.drain_events());
+                if events
+                    .iter()
+                    .any(|event| matches!(event, MpvEvent::Exit { .. }))
+                {
+                    break;
+                }
+                sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let home = events
+            .iter()
+            .position(|event| matches!(event, MpvEvent::TvHome))
+            .unwrap();
+        let exit = events
+            .iter()
+            .position(|event| matches!(event, MpvEvent::Exit { code: Some(0), .. }))
+            .unwrap();
+        assert!(home < exit);
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, MpvEvent::ProtocolFailure(_)))
+        );
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn only_the_exact_tv_home_client_message_is_accepted() {
+        let (sender, mut incoming) = mpsc::channel(4);
+        for line in [
+            r#"{"event":"client-message","args":["other"]}"#,
+            r#"{"event":"client-message","args":["cyberos-tv-home","extra"]}"#,
+            r#"{"event":"client-message","args":"cyberos-tv-home"}"#,
+        ] {
+            handle_ipc_line(line, &sender).await;
+        }
+        assert!(incoming.try_recv().is_err());
+        handle_ipc_line(
+            r#"{"event":"client-message","args":["cyberos-tv-home"]}"#,
+            &sender,
+        )
+        .await;
+        assert!(matches!(
+            incoming.try_recv(),
+            Ok(Incoming::Event(MpvEvent::TvHome))
+        ));
     }
 
     #[tokio::test]
@@ -1339,14 +1423,9 @@ ipc_fd=
     async fn reports_an_unexpected_ipc_disconnect() {
         let (writer, reader) = UnixStream::pair().unwrap();
         let (reader, _) = tokio::io::split(reader);
-        let (sender, mut incoming) = mpsc::channel(2);
+        let (sender, _incoming) = mpsc::channel(2);
         let task = tokio::spawn(read_ipc(reader, sender));
         drop(writer);
-        assert!(matches!(
-            incoming.recv().await,
-            Some(Incoming::Event(MpvEvent::ProtocolFailure(message)))
-                if message == "mpv IPC closed unexpectedly"
-        ));
-        task.await.unwrap();
+        assert_eq!(task.await.unwrap(), "mpv IPC closed unexpectedly");
     }
 }

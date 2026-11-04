@@ -400,6 +400,9 @@ pub enum PlaybackOwner {
 #[cfg_attr(test, ts(export_to = "vod-player.ts", rename = "VodPlayerStatus"))]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
+    pub tv_home_request_id: Option<String>,
     #[serde(default)]
     pub audio_delay_key: Option<String>,
     #[serde(default)]

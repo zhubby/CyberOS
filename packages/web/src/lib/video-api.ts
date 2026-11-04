@@ -1,10 +1,11 @@
-import type { MediaCollection, MediaPersonalState, StreamOptions, StreamSession, VideoHome, VideoPage, VideoQuery, VideoTitleDetail, NasPlaybackStatus, VodPlayerCommand } from "@cyberos/shared";
+import type { MediaCollection, MediaPersonalState, StreamOptions, StreamSession, VideoHome, VideoPage, VideoQuery, VideoTitleDetail, VideoFilterOptions, NasPlaybackStatus, VodPlayerCommand } from "@cyberos/shared";
 export async function mediaRequest<T>(path: string, method = "GET", body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/${path}`, { method, ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), ...(signal ? { signal } : {}) });
   if (!response.ok) { const result = await response.json().catch(() => ({})) as { error?: string }; throw new Error(result.error ?? response.statusText); }
   return response.status === 204 ? undefined as T : await response.json() as T;
 }
 export const getVideoHome = () => mediaRequest<VideoHome>("media/home");
+export const getVideoFilterOptions = () => mediaRequest<VideoFilterOptions>("media/filter-options");
 export const getVideoDetail = (id: string, signal?: AbortSignal) => mediaRequest<{ title: VideoTitleDetail }>(`media/titles/${encodeURIComponent(id)}`, "GET", undefined, signal).then(r => r.title);
 export function getVideoPage(input: VideoQuery, signal?: AbortSignal) { const q = new URLSearchParams(); for (const [key, value] of Object.entries(input)) if (value !== undefined && value !== "") q.set(key, String(value)); return mediaRequest<VideoPage>(`media/titles?${q}`, "GET", undefined, signal); }
 export const setVideoState = (id: string, state: Partial<MediaPersonalState>) => mediaRequest(`media/titles/${encodeURIComponent(id)}/state`, "PATCH", state);

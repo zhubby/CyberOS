@@ -28,6 +28,7 @@ import type {
   MediaSourceRecord,
   MediaTitleSummary,
   VideoHome,
+  VideoFilterOptions,
   VideoPage,
   VideoQuery,
   VideoTitleDetail,
@@ -38,6 +39,7 @@ import {
   getCollections,
   getVideoDetail,
   getVideoHome,
+  getVideoFilterOptions,
   getVideoPage,
   mediaRequest,
   saveCollection,
@@ -87,10 +89,14 @@ export function VideoLibraryPanel({
   tv = false,
   onManage,
   requestedTitleId,
+  onSearch,
+  onCloseRequestedTitle,
 }: {
   tv?: boolean;
   onManage?: () => void;
   requestedTitleId?: string | null;
+  onSearch?: () => void;
+  onCloseRequestedTitle?: (restoreSearch: boolean) => void;
 }) {
   const { t } = useTranslation();
   const playback = usePlayback();
@@ -100,12 +106,16 @@ export function VideoLibraryPanel({
   const [query, setQuery] = useAppViewState<VideoQuery>("video.query", { sort: "title" });
   const [draftFilters, setDraftFilters] = useState<VideoFilters>(DEFAULT_FILTERS);
   const [sources, setSources] = useState<MediaSourceRecord[]>([]);
+  const [filterOptions, setFilterOptions] = useState<VideoFilterOptions>({ years: [], genres: [] });
+  const [filterState, setFilterState] = useState<"loading" | "ready" | "error">("loading");
+  const [filterRetry, setFilterRetry] = useState(0);
   const [collections, setCollections] = useState<MediaCollection[]>([]);
   const [detail, setDetail] = useState<VideoTitleDetail | null>(null);
   const [detailId, setDetailId] = useAppViewState<string | null>("video.detail", null);
   const [selected, setSelected] = useAppViewState("video.selected", "");
   const [season, setSeason] = useAppViewState<number | null>("video.season", null);
-  const [loading, setLoading] = useState(true);
+  const [homeLoading, setHomeLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collectionOpen, setCollectionOpen] = useState(false);
@@ -125,8 +135,20 @@ export function VideoLibraryPanel({
   const moreRef = useRef(false);
   const detailSequence = useRef(0);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const returnFocus = useRef<{ element: HTMLElement; scroll: number; poster: number; titleId: string; regionIndex: number; railScroll: number } | null>(null);
+  const collectionFocus = useRef<string | null>(null);
   const activeDetailId = detailId ?? detail?.id;
   const reload = useCallback(() => setVersion((v) => v + 1), []);
+  useEffect(() => {
+    if (!tv) return;
+    let live = true;
+    setFilterState("loading");
+    void getVideoFilterOptions().then(options => {
+      if (live) { setFilterOptions(options); setFilterState("ready"); }
+    }).catch(() => { if (live) setFilterState("error"); });
+    return () => { live = false; };
+  }, [tv, version, filterRetry]);
   useEffect(() => {
     const id = activeDetailId;
     if (!id) return;
@@ -159,13 +181,13 @@ export function VideoLibraryPanel({
           setHome(h);
           setCollections(c);
           setSources(s.sources);
-          setLoading(false);
+          setHomeLoading(false);
         }
       })
       .catch((e) => {
         if (live) {
           setError(String(e.message));
-          setLoading(false);
+          setHomeLoading(false);
         }
       });
     return () => {
@@ -209,10 +231,11 @@ export function VideoLibraryPanel({
     (view !== "home" && view !== "collections") ||
     searching ||
     !!query.collectionId;
+  const loading = listMode ? listLoading : homeLoading;
   useEffect(() => {
     if (!listMode) return;
     const controller = new AbortController();
-    setLoading(true);
+    setListLoading(true);
     setError(null);
     const timer = window.setTimeout(() => {
       void getVideoPage(
@@ -225,19 +248,21 @@ export function VideoLibraryPanel({
         controller.signal,
       )
         .then((next) => {
+          if (controller.signal.aborted) return;
           setPage(next);
-          setLoading(false);
+          setListLoading(false);
         })
         .catch((e) => {
           if (!controller.signal.aborted) {
             setError(e instanceof Error ? e.message : String(e));
-            setLoading(false);
+            setListLoading(false);
           }
         });
     }, 200);
     return () => {
       controller.abort();
       window.clearTimeout(timer);
+      setListLoading(false);
     };
   }, [view, query, version, listMode]);
   const act = async (work: () => Promise<unknown>) => {
@@ -253,6 +278,17 @@ export function VideoLibraryPanel({
     }
   };
   const open = async (title: MediaTitleSummary, preferred?: string) => {
+    if (tv && document.activeElement instanceof HTMLElement) {
+      const region = document.activeElement.closest<HTMLElement>('[data-tv-region="rail"], [data-tv-region="grid"]');
+      returnFocus.current = {
+        element: document.activeElement,
+        scroll: contentRef.current?.scrollTop ?? 0,
+        poster: [...(panelRef.current?.querySelectorAll(".video-poster") ?? [])].indexOf(document.activeElement),
+        titleId: title.id,
+        regionIndex: [...(panelRef.current?.querySelectorAll('[data-tv-region="rail"], [data-tv-region="grid"]') ?? [])].indexOf(region as HTMLElement),
+        railScroll: region?.scrollLeft ?? 0,
+      };
+    }
     const sequence = ++detailSequence.current;
     setError(null);
     setBusy(true);
@@ -291,12 +327,30 @@ export function VideoLibraryPanel({
       if (sequence === detailSequence.current) setBusy(false);
     }
   };
-  const closeDetail = () => {
+  const closeDetail = useCallback((restoreSearch = true) => {
     detailSequence.current++;
     setDetail(null);
     setDetailId(null);
     setMatching(false);
-  };
+    setBusy(false);
+    if (requestedTitleId) onCloseRequestedTitle?.(restoreSearch);
+    if (tv && restoreSearch && !requestedTitleId) window.requestAnimationFrame(() => {
+      const target = returnFocus.current;
+      const region = target ? panelRef.current?.querySelectorAll<HTMLElement>('[data-tv-region="rail"], [data-tv-region="grid"]')[target.regionIndex] : null;
+      const byTitle = [...(region?.querySelectorAll<HTMLElement>("[data-tv-title]") ?? [])].find(element => element.dataset.tvTitle === target?.titleId);
+      const element = target?.element.isConnected ? target.element : byTitle ?? (target ? panelRef.current?.querySelectorAll<HTMLElement>(".video-poster")[target.poster] : null);
+      if (element) {
+        if (contentRef.current) contentRef.current.scrollTop = target?.scroll ?? 0;
+        if (region) region.scrollLeft = target?.railScroll ?? 0;
+        element.focus({ preventScroll: true });
+      } else panelRef.current?.querySelector<HTMLElement>('.video-navigation button[aria-pressed="true"]')?.focus();
+    });
+  }, [tv, requestedTitleId, onCloseRequestedTitle, setDetailId]);
+  useEffect(() => {
+    if (!tv || !detail) return;
+    const frame = window.requestAnimationFrame(() => (panelRef.current?.querySelector<HTMLElement>("[data-tv-detail-primary]") ?? panelRef.current?.querySelector<HTMLElement>(".video-back"))?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [tv, detail?.id]);
   useMobileBack(() => { if (detailId || detail) { closeDetail(); return true; } if (view !== "home") { setView("home"); return true; } return false; }, 10);
   useEffect(() => {
     if (!requestedTitleId) return;
@@ -305,6 +359,7 @@ export function VideoLibraryPanel({
       .then((next) => {
         if (live) {
           setDetail(next);
+          setDetailId(next.id);
           setSeason(next.seasons[0]?.seasonNumber ?? null);
           setSelected(
             next.progress?.fileId ??
@@ -320,22 +375,37 @@ export function VideoLibraryPanel({
     return () => {
       live = false;
     };
-  }, [requestedTitleId]);
+  }, [requestedTitleId, setDetailId]);
   useEffect(() => {
     if (!tv) return;
     const back = () => {
-      detailSequence.current++;
-      setDetail(null);
-      setMatching(false);
-      window.requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>(".video-navigation button")
-          ?.focus(),
-      );
+      if (detail || detailId || busy) { closeDetail(); return; }
+      if (query.collectionId) {
+        setQuery(({ collectionId: _collection, ...rest }) => rest);
+        window.requestAnimationFrame(() => {
+          const buttons = [...(panelRef.current?.querySelectorAll<HTMLElement>("[data-tv-collection]") ?? [])];
+          (buttons.find(button => button.dataset.tvCollection === collectionFocus.current) ?? buttons[0])?.focus();
+        });
+      } else {
+        setView("home");
+        setQuery({ sort: "title" });
+        window.requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>(".video-navigation button")?.focus());
+      }
+    };
+    const home = () => {
+      closeDetail(false);
+      setView("home");
+      setQuery({ sort: "title" });
+      if (contentRef.current) contentRef.current.scrollTop = 0;
+      window.requestAnimationFrame(() => panelRef.current?.querySelector<HTMLElement>(".video-navigation button")?.focus());
     };
     window.addEventListener("cyberos:video-back", back);
-    return () => window.removeEventListener("cyberos:video-back", back);
-  }, [tv]);
+    window.addEventListener("cyberos:video-home", home);
+    return () => {
+      window.removeEventListener("cyberos:video-back", back);
+      window.removeEventListener("cyberos:video-home", home);
+    };
+  }, [tv, detail, detailId, busy, query.collectionId, closeDetail, setView, setQuery]);
 
   const startNas = async (
     file: MediaFileRecord,
@@ -438,7 +508,7 @@ export function VideoLibraryPanel({
       });
   };
   const posters = (titles: MediaTitleSummary[], rail = false, next = false) => (
-    <div className={rail ? "video-poster-rail" : "video-poster-wall"}>
+    <div className={rail ? "video-poster-rail" : "video-poster-wall"} data-tv-region={rail ? "rail" : "grid"}>
       {titles.map((title) => (
         <VideoPoster
           key={title.id}
@@ -457,6 +527,7 @@ export function VideoLibraryPanel({
   );
   return (
     <div
+      ref={panelRef}
       className={`video-panel${tv ? " video-panel-tv" : ""}`}
       aria-busy={busy || loading}
     >
@@ -485,8 +556,8 @@ export function VideoLibraryPanel({
         }
       />
       {!detail ? (
-        <div className="library-search-toolbar">
-          <form className="search" onSubmit={(event) => event.preventDefault()}>
+        <div className="library-search-toolbar" data-tv-region="filters">
+          {tv ? <button type="button" className="search tv-library-search" data-tv-focusable onClick={onSearch}><Search size={22} aria-hidden="true" />{t("video.search")}</button> : <form className="search" onSubmit={(event) => event.preventDefault()}>
             <Search size={17} aria-hidden="true" />
             <input
               data-tv-focusable
@@ -496,7 +567,7 @@ export function VideoLibraryPanel({
               value={query.query ?? ""}
               onChange={(event) => setQuery((current) => ({ ...current, query: event.target.value }))}
             />
-          </form>
+          </form>}
           <SearchFilterPopover
             label={t("video.filter")}
             active={Boolean(query.sourceId || query.year || query.genre || query.favorite || query.watched !== undefined || (query.sort && query.sort !== "title"))}
@@ -524,9 +595,16 @@ export function VideoLibraryPanel({
               />
             </div>
             <div className="workspace-search-field-grid">
-              <label className="workspace-search-field">
+              <div className="workspace-search-field">
                 <span>{t("video.year")}</span>
-                <input
+                {tv ? <CustomSelect
+                  ariaLabel={t("video.year")}
+                  value={String(draftFilters.year ?? "")}
+                  disabled={filterState !== "ready"}
+                  options={[{ value: "", label: t("video.all") }, ...filterOptions.years.map(year => ({ value: String(year), label: String(year) }))]}
+                  onChange={year => setDraftFilters(current => ({ ...current, year: year ? Number(year) : undefined }))}
+                /> : <input
+                  aria-label={t("video.year")}
                   data-tv-focusable
                   type="number"
                   min="1"
@@ -536,16 +614,27 @@ export function VideoLibraryPanel({
                     ...current,
                     year: event.target.value ? Number(event.target.value) : undefined,
                   }))}
-                />
-              </label>
-              <label className="workspace-search-field">
+                />}
+              </div>
+              <div className="workspace-search-field">
                 <span>{t("video.genre")}</span>
-                <input
+                {tv ? <CustomSelect
+                  ariaLabel={t("video.genre")}
+                  value={draftFilters.genre ?? ""}
+                  disabled={filterState !== "ready"}
+                  options={[{ value: "", label: t("video.all") }, ...filterOptions.genres.map(genre => ({ value: genre, label: genre }))]}
+                  onChange={genre => setDraftFilters(current => ({ ...current, genre: genre || undefined }))}
+                /> : <input
+                  aria-label={t("video.genre")}
                   data-tv-focusable
                   value={draftFilters.genre ?? ""}
                   onChange={(event) => setDraftFilters((current) => ({ ...current, genre: event.target.value || undefined }))}
-                />
-              </label>
+                />}
+              </div>
+              {tv && filterState !== "ready" ? <div className="video-filter-status" role={filterState === "error" ? "alert" : "status"}>
+                {t(filterState === "error" ? "tv.filtersFailed" : "tv.loadingFilters")}
+                {filterState === "error" ? <button onClick={() => setFilterRetry(v => v + 1)}>{t("tv.retry")}</button> : null}
+              </div> : null}
               <div className="workspace-search-field">
                 <span>{t("video.sort")}</span>
                 <CustomSelect<NonNullable<VideoQuery["sort"]>>
@@ -587,7 +676,7 @@ export function VideoLibraryPanel({
           </SearchFilterPopover>
         </div>
       ) : null}
-      <nav className="video-navigation" aria-label={t("video.library")}>
+      <nav className="video-navigation" data-tv-region="navigation" aria-label={t("video.library")}>
         {(["home", "movie", "series", "collections", "watchlist"] as const).map(
           (tab) => (
             <button
@@ -595,7 +684,7 @@ export function VideoLibraryPanel({
               key={tab}
               aria-pressed={view === tab && !detail}
               onClick={() => {
-                closeDetail();
+                closeDetail(false);
                 setView(tab);
                 setQuery((q) => {
                   const { collectionId: _collection, ...rest } = q;
@@ -616,13 +705,13 @@ export function VideoLibraryPanel({
       <div ref={contentRef} className="video-content">
         {detail ? (
           <article className="video-detail">
-            <button data-tv-focusable onClick={closeDetail}>
+            <button className="video-back" data-tv-focusable onClick={() => closeDetail()}>
               <ArrowLeft size={17} />
               {t("video.back")}
             </button>
             <div className="video-detail-main">
               <VideoArtwork title={detail} />
-              <div>
+              <div data-tv-region="detail">
                 <h2>{detail.title}</h2>
                 <p className="video-meta">
                   {[
@@ -677,6 +766,7 @@ export function VideoLibraryPanel({
                     <>
                       <button
                         className="primary-button"
+                        data-tv-detail-primary={tv || undefined}
                         data-tv-focusable
                         disabled={busy}
                         onClick={() => play(file, tv)}
@@ -700,21 +790,16 @@ export function VideoLibraryPanel({
                   )}
                 </div>
                 {file ? (
-                  <label className="video-version">
-                    {t("video.version")}
-                    <select
-                      data-tv-focusable
+                  <div className="video-version">
+                    <span>{t("video.version")}</span>
+                    <CustomSelect
+                      ariaLabel={t("video.version")}
                       value={selected}
-                      onChange={(e) => setSelected(e.target.value)}
-                    >
-                      {files
+                      onChange={setSelected}
+                      options={files
                         .filter((f) => f.episodeId === file.episodeId)
-                        .map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.name}
-                          </option>
-                        ))}
-                    </select>
+                        .map((f, index) => ({ value: f.id, label: tv ? [`${t("video.version")} ${index + 1}`, ...(detail.technical[f.id] ?? []).filter(track => track.type === "video" && track.height).map(track => `${track.height}p`), f.videoCodec, `${(f.sizeBytes / 1024 ** 3).toFixed(1)} GB`].filter(Boolean).join(" · ") : f.name }))}
+                    />
                     <small>
                       {[
                         file.container,
@@ -733,12 +818,18 @@ export function VideoLibraryPanel({
                         .filter(Boolean)
                         .join(" · ")}
                     </small>
-                  </label>
+                    {tv ? <details className="tv-file-details">
+                      <summary data-tv-focusable>{t("tv.fileDetails")}</summary>
+                      <p>{file.name}</p>
+                      <p>{file.relativePath}</p>
+                      {(detail.technical[file.id] ?? []).map((track, index) => <p key={index}>{[track.type, track.codec, track.width && track.height ? `${track.width}×${track.height}` : null, track.language, track.title, track.hdr ? "HDR" : null].filter(Boolean).join(" · ")}</p>)}
+                    </details> : null}
+                  </div>
                 ) : null}
               </div>
             </div>
             {detail.seasons.length ? (
-              <section className="video-seasons">
+              <section className="video-seasons" data-tv-region="episodes">
                 <nav>
                   {detail.seasons.map((s) => (
                     <button
@@ -760,8 +851,13 @@ export function VideoLibraryPanel({
                     >
                       <button
                         data-tv-focusable
-                        disabled={!e.files.length}
-                        onClick={() => setSelected(e.files[0]?.id ?? "")}
+                        disabled={busy || !e.files.length}
+                        onClick={() => {
+                          const episodeFile = e.files.find((f) => f.id === selected) ?? e.files[0];
+                          if (!episodeFile) return;
+                          setSelected(episodeFile.id);
+                          if (tv) play(episodeFile, true);
+                        }}
                       >
                         <span>{String(e.episodeNumber).padStart(2, "0")}</span>
                         <span>
@@ -936,7 +1032,7 @@ export function VideoLibraryPanel({
             ) : null}
           </>
         ) : view === "collections" ? (
-          <section className="video-collections">
+          <section className="video-collections" data-tv-region="collections">
             <header>
               <h3>{t("video.collections")}</h3>
               {!tv ? (
@@ -950,9 +1046,11 @@ export function VideoLibraryPanel({
               <div key={c.id}>
                 <button
                   data-tv-focusable
-                  onClick={() =>
-                    setQuery((q) => ({ ...q, collectionId: c.id }))
-                  }
+                  data-tv-collection={c.id}
+                  onClick={() => {
+                    collectionFocus.current = c.id;
+                    setQuery((q) => ({ ...q, collectionId: c.id }));
+                  }}
                 >
                   <Film size={24} />
                   <strong>{c.name}</strong>
@@ -1098,7 +1196,7 @@ function VideoPoster({
   onOpen: () => void;
 }) {
   return (
-    <button data-tv-focusable className="video-poster" onClick={onOpen}>
+    <button data-tv-focusable data-tv-title={title.id} className="video-poster" onClick={onOpen}>
       <VideoArtwork title={title} />
       <strong>{title.title}</strong>
       <small>

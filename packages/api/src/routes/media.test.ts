@@ -153,6 +153,9 @@ describe("Media API", () => {
     const home = await server.inject({ method: "GET", url: "/api/media/home" });
     expect(home.statusCode).toBe(200);
     expect(home.json().movies).toEqual([expect.objectContaining({ id: stored.title.id, title: "Arrival" })]);
+    const filters = await server.inject({ method: "GET", url: "/api/media/filter-options" });
+    expect(filters.statusCode).toBe(200);
+    expect(filters.json()).toEqual({ years: [2016], genres: [] });
     const detail = await server.inject({ method: "GET", url: `/api/media/titles/${stored.title.id}` });
     expect(detail.statusCode).toBe(200);
     expect(detail.json().title.files[0].id).toBe(stored.file.id);

@@ -57,6 +57,10 @@ export interface VideoPage {
   titles: VideoTitle[];
   nextCursor: string | null;
 }
+export interface VideoFilterOptions {
+  years: number[];
+  genres: string[];
+}
 export interface PlaybackOutput {
   requested: { kind: "default" | "bluetooth"; deviceId: string | null };
   effective: {
