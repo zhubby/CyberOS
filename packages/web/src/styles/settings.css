@@ -1151,6 +1151,38 @@
   margin: 0;
 }
 
+.settings-download-directory {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-download-directory-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.settings-download-directory-value svg {
+  flex: 0 0 auto;
+}
+
+.settings-download-directory-value span {
+  overflow-wrap: anywhere;
+}
+
+.settings-download-directory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .settings-download-fields {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

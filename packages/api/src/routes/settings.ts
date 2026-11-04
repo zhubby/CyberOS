@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { access, chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { access, chmod, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { initBackup, validateBackup } from "@cyberos/backup";
@@ -74,6 +75,7 @@ import { loadEffectiveShareSettings } from "../lib/share-credentials.js";
 import { PathSafetyError } from "@cyberos/storage-tools";
 import { AUDIO_SETTING_FIELDS, normalizeAudioSettings, publicAudioSettings } from "@cyberos/shared";
 import { listBackupDirectories } from "../lib/backup-directories.js";
+import { resolveScopedExistingPath, resolveStoragePoolScope } from "../lib/storage-scope.js";
 
 export function registerSettingsRoutes(server: FastifyInstance, { config, db, system, tvMode, audio }: ApiRouteContext): void {
   server.get("/api/settings/audio", async (_request, reply) => {
@@ -364,7 +366,7 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db, sy
   });
 
   server.patch<{
-    Body: Partial<Record<keyof Omit<DownloadSettingsRecord, "updatedAt">, number | string | null>>;
+    Body: Partial<Omit<DownloadSettingsRecord, "updatedAt">>;
   }>("/api/settings/downloads", async (request, reply) => {
     try {
       const existing = readForRepair(() => getDownloadSettings(db), defaultDownloadSettings);
@@ -374,6 +376,10 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db, sy
         "responseHeaderTimeoutMs", "readIdleTimeoutMs", "minFreeSpaceBytes"
       ] as const;
       const next: Omit<DownloadSettingsRecord, "updatedAt"> = { ...existing };
+      if (request.body?.btConcurrency !== undefined) {
+        if (typeof request.body.btConcurrency !== "number") throw new Error("BitTorrent concurrency must be an integer between 1 and 10");
+        next.btConcurrency = request.body.btConcurrency;
+      }
       for (const key of numericKeys) {
         if (request.body?.[key] !== undefined && request.body[key] !== null) {
           next[key] = Number(request.body[key]);
@@ -383,6 +389,25 @@ export function registerSettingsRoutes(server: FastifyInstance, { config, db, sy
         next.maxFileSizeBytes = request.body.maxFileSizeBytes === null
           ? null
           : Number(request.body.maxFileSizeBytes);
+      }
+      const locationChanged = request.body?.defaultStoragePoolId !== undefined || request.body?.defaultTargetDirectory !== undefined;
+      if (locationChanged) {
+        if (request.body.defaultStoragePoolId === undefined || request.body.defaultTargetDirectory === undefined) {
+          throw new Error("Download default storage pool and directory must be configured together");
+        }
+        next.defaultStoragePoolId = request.body.defaultStoragePoolId;
+        next.defaultTargetDirectory = request.body.defaultTargetDirectory;
+        if (next.defaultStoragePoolId !== null || next.defaultTargetDirectory !== null) {
+          if (typeof next.defaultStoragePoolId !== "string" || typeof next.defaultTargetDirectory !== "string" || !next.defaultTargetDirectory.trim()) {
+            throw new Error("Download default storage pool and directory must be configured together");
+          }
+          const scope = await resolveStoragePoolScope(config.paths.dataRoot, system, next.defaultStoragePoolId);
+          const directory = await resolveScopedExistingPath(scope, next.defaultTargetDirectory);
+          if (!(await stat(directory.realPath)).isDirectory()) throw new Error("Download default directory must be a directory");
+          await access(directory.realPath, fsConstants.W_OK | fsConstants.X_OK);
+          next.defaultStoragePoolId = scope.pool.id;
+          next.defaultTargetDirectory = directory.relativePath;
+        }
       }
       reply.send({
         settings: saveDownloadSettings(db, next)

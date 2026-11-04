@@ -618,6 +618,9 @@ export function SettingsModal({
             <SettingsDownloadsPage
               settings={downloadSettings}
               loading={loading}
+              storagePools={storagePools}
+              locale={resolvedLocale}
+              onRequestCreateFolder={onRequestCreateFolder}
               onSettingsChange={onDownloadSettingsChange}
               onClose={onClose}
             />
@@ -1283,11 +1286,17 @@ type DownloadSettingsDraft = Omit<DownloadSettings, "updatedAt">;
 export function SettingsDownloadsPage({
   settings,
   loading,
+  storagePools,
+  locale,
+  onRequestCreateFolder,
   onSettingsChange,
   onClose
 }: {
   settings: DownloadSettings | null;
   loading: boolean;
+  storagePools: StorageFilePickerPool[];
+  locale: SupportedLocale;
+  onRequestCreateFolder?: (input: { storagePoolId: string; parentPath: string; name: string }) => Promise<void>;
   onSettingsChange: (patch: Partial<DownloadSettingsDraft>) => Promise<void>;
   onClose: () => void;
 }) {
@@ -1295,6 +1304,14 @@ export function SettingsDownloadsPage({
   const [draft, setDraft] = useState<DownloadSettingsDraft>(() => downloadSettingsDraft(settings));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const directoryButtonRef = useRef<HTMLButtonElement | null>(null);
+  const defaultPool = storagePools.find((pool) => pool.id === draft.defaultStoragePoolId);
+  const directoryText = draft.defaultTargetDirectory !== null
+    ? `${defaultPool?.name ?? draft.defaultStoragePoolId} / ${draft.defaultTargetDirectory}`
+    : t("settings.downloads.directoryNotSet");
 
   useEffect(() => {
     setDraft(downloadSettingsDraft(settings));
@@ -1306,15 +1323,19 @@ export function SettingsDownloadsPage({
     if (saving || loading) return;
     setSaving(true);
     setSaved(false);
+    setSaveError(null);
     try {
       await onSettingsChange(draft);
       setSaved(true);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
   }
 
   return (
+    <>
     <form className="settings-form" onSubmit={(event) => void submit(event)}>
       <div className="settings-content-body">
         <div className="settings-page-grid settings-downloads-grid">
@@ -1326,13 +1347,17 @@ export function SettingsDownloadsPage({
                 </div>
               </header>
 
-              <fieldset className="settings-download-control" disabled={loading || saving}>
+              {([
+                { key: "concurrency", id: "download-concurrency", label: "settings.downloads.concurrencyField", help: "settings.downloads.concurrencyHelp" },
+                { key: "btConcurrency", id: "download-bt-concurrency", label: "settings.downloads.btConcurrencyField", help: "settings.downloads.btConcurrencyHelp" }
+              ] as const).map((control) => (
+              <fieldset className="settings-download-control" disabled={loading || saving} key={control.key}>
                 <div className="settings-preference-field">
-                  <HelpLabel label={t("settings.downloads.concurrencyField")} content={t("settings.downloads.concurrencyHelp")} htmlFor="download-concurrency" />
+                  <HelpLabel label={t(control.label)} content={t(control.help)} htmlFor={control.id} />
                   <CustomSelect
-                    id="download-concurrency"
-                    value={String(draft.concurrency)}
-                    ariaLabel={t("settings.downloads.concurrencyField")}
+                    id={control.id}
+                    value={String(draft[control.key])}
+                    ariaLabel={t(control.label)}
                     disabled={loading || saving}
                     options={Array.from({ length: 10 }, (_, index) => index + 1).map((value) => ({
                       value: String(value),
@@ -1340,14 +1365,33 @@ export function SettingsDownloadsPage({
                     }))}
                     onChange={(value) => setDraft((current) => ({
                       ...current,
-                      concurrency: Number(value)
+                      [control.key]: Number(value)
                     }))}
                   />
                 </div>
                 <div className="settings-download-visual" aria-hidden="true">
                   <Download size={22} />
-                  <strong>{draft.concurrency}</strong>
+                  <strong>{draft[control.key]}</strong>
                   <span>{t("settings.downloads.connectionUnit")}</span>
+                </div>
+              </fieldset>
+              ))}
+              <fieldset className="settings-preference-field settings-download-directory" disabled={loading || saving}>
+                <HelpLabel label={t("settings.downloads.defaultDirectory")} content={t("settings.downloads.defaultDirectoryHelp")} htmlFor="download-default-directory" />
+                <div className="settings-download-directory-value" data-tooltip={directoryText}>
+                  <Folder aria-hidden="true" size={15} />
+                  <span>{directoryText}</span>
+                </div>
+                <div className="settings-download-directory-actions">
+                  <button id="download-default-directory" ref={directoryButtonRef} type="button" className="secondary-button" disabled={!storagePools.some((pool) => pool.status !== "offline")} onClick={() => setPickerOpen(true)}>
+                    <Folder aria-hidden="true" size={15} />
+                    {t("settings.downloads.chooseDirectory")}
+                  </button>
+                  <button type="button" className="secondary-button" disabled={draft.defaultStoragePoolId === null} onClick={() => {
+                    setDraft((current) => ({ ...current, defaultStoragePoolId: null, defaultTargetDirectory: null }));
+                    setSaved(false);
+                    setSaveError(null);
+                  }}>{t("settings.downloads.clearDirectory")}</button>
                 </div>
               </fieldset>
               <fieldset className="settings-field-grid settings-download-fields" disabled={loading || saving}>
@@ -1415,6 +1459,7 @@ export function SettingsDownloadsPage({
         </div>
       </div>
 
+      {saveError ? <p className="settings-inline-alert" role="alert">{saveError}</p> : null}
       <footer className="settings-actions">
         <span role="status">
           {saving
@@ -1435,6 +1480,25 @@ export function SettingsDownloadsPage({
         </div>
       </footer>
     </form>
+    {pickerOpen ? (
+      <StorageFilePickerDialog
+        pools={storagePools}
+        initialPoolId={draft.defaultStoragePoolId ?? storagePools[0]?.id ?? ""}
+        {...(draft.defaultTargetDirectory !== null ? { initialPath: draft.defaultTargetDirectory } : {})}
+        locale={locale}
+        mode="directory"
+        returnFocusRef={directoryButtonRef}
+        onCancel={() => setPickerOpen(false)}
+        onSelect={(selection) => {
+          setDraft((current) => ({ ...current, defaultStoragePoolId: selection.storagePoolId, defaultTargetDirectory: selection.path }));
+          setPickerOpen(false);
+          setSaved(false);
+          setSaveError(null);
+        }}
+        {...(onRequestCreateFolder ? { onRequestCreateFolder } : {})}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -1445,6 +1509,9 @@ function downloadSettingsDraft(settings: DownloadSettings | null): DownloadSetti
   }
   return {
     concurrency: 1,
+    btConcurrency: 3,
+    defaultStoragePoolId: null,
+    defaultTargetDirectory: null,
     parallelRequestsPerTask: 4,
     segmentedDownloadMinBytes: 64 * 1024 * 1024,
     maxAutoRetries: 5,

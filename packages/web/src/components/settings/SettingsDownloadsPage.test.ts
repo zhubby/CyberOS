@@ -13,6 +13,9 @@ describe("SettingsDownloadsPage", () => {
     const html = renderToStaticMarkup(createElement(SettingsDownloadsPage, {
       settings: {
         concurrency: 10,
+        btConcurrency: 3,
+        defaultStoragePoolId: "pool-1",
+        defaultTargetDirectory: "Downloads",
         parallelRequestsPerTask: 4,
         segmentedDownloadMinBytes: 64 * 1024 * 1024,
         maxAutoRetries: 5,
@@ -27,11 +30,16 @@ describe("SettingsDownloadsPage", () => {
         updatedAt: "2026-01-01T00:00:00.000Z"
       },
       loading: false,
+      storagePools: [{ id: "pool-1", name: "Data", path: ".", filesystem: "ext4", status: "ready" }],
+      locale: "en",
       onSettingsChange: vi.fn(),
       onClose: vi.fn()
     }));
 
     expect(html).toContain("10 connection");
+    expect(html).toContain("Concurrent BitTorrent downloads");
+    expect(html).toContain("Default download directory");
+    expect(html).toContain("Downloads");
     expect(html).toContain("Range requests per task");
     expect(html).toContain("Segmentation threshold (bytes)");
     expect(html).toContain("Maximum automatic retries");

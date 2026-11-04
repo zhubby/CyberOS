@@ -273,7 +273,8 @@ type DownloadManageRequest =
   }>
   | Operation<"pause" | "resume" | "cancel" | "retry" | "delete", { taskId: string }>
   | (Operation<"settings"> & OptionalJsonFields<
-    "concurrency" | "parallelRequestsPerTask" | "segmentedDownloadMinBytes" | "maxAutoRetries" |
+    "concurrency" | "btConcurrency" | "defaultStoragePoolId" | "defaultTargetDirectory" |
+    "parallelRequestsPerTask" | "segmentedDownloadMinBytes" | "maxAutoRetries" |
     "retryBaseDelayMs" | "retryMaxDelayMs" | "retryAfterMaxDelayMs" | "connectTimeoutMs" |
     "responseHeaderTimeoutMs" | "readIdleTimeoutMs" | "minFreeSpaceBytes" | "maxFileSizeBytes"
   >);
@@ -634,7 +635,10 @@ const schemas: Record<string, JsonSchema> = {
     operation("retry", { taskId: id(128) }, ["taskId"]),
     operation("delete", { taskId: id(128) }, ["taskId"]),
     operation("settings", {
-      concurrency: integer(1, 64),
+      concurrency: integer(1, 10),
+      btConcurrency: integer(1, 10),
+      defaultStoragePoolId: nullableText(256),
+      defaultTargetDirectory: nullableText(4096),
       parallelRequestsPerTask: integer(1, 32),
       segmentedDownloadMinBytes: integer(0, 1_099_511_627_776),
       maxAutoRetries: integer(0, 100),

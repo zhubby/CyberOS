@@ -147,6 +147,9 @@ export const DEFAULT_BLUETOOTH_SETTINGS: Omit<BluetoothSettingsRecord, "updatedA
 export const DEFAULT_DOWNLOAD_CONCURRENCY = 1;
 export const DEFAULT_DOWNLOAD_SETTINGS: Omit<DownloadSettingsRecord, "updatedAt"> = {
   concurrency: DEFAULT_DOWNLOAD_CONCURRENCY,
+  btConcurrency: 3,
+  defaultStoragePoolId: null,
+  defaultTargetDirectory: null,
   parallelRequestsPerTask: 4,
   segmentedDownloadMinBytes: 64 * 1024 * 1024,
   maxAutoRetries: 5,
@@ -826,6 +829,20 @@ function normalizeDownloadSettings(
     return candidate;
   };
   const concurrency = normalizeDownloadConcurrency(value.concurrency);
+  const defaultStoragePoolId = value.defaultStoragePoolId === undefined ? null : value.defaultStoragePoolId;
+  const defaultTargetDirectory = value.defaultTargetDirectory === undefined ? null : value.defaultTargetDirectory;
+  if ((defaultStoragePoolId === null) !== (defaultTargetDirectory === null)) {
+    throw new Error("Download default storage pool and directory must be configured together");
+  }
+  if (defaultStoragePoolId !== null && (
+    typeof defaultStoragePoolId !== "string" || !defaultStoragePoolId.trim() || defaultStoragePoolId.length > 256
+    || typeof defaultTargetDirectory !== "string" || !defaultTargetDirectory || defaultTargetDirectory.length > 4096
+    || defaultTargetDirectory.includes("\0") || defaultTargetDirectory.includes("\\")
+    || path.posix.isAbsolute(defaultTargetDirectory) || defaultTargetDirectory.split("/").includes("..")
+    || path.posix.normalize(defaultTargetDirectory) !== defaultTargetDirectory
+  )) {
+    throw new Error("Download default directory must be a normalized path inside a storage pool");
+  }
   const retryBaseDelayMs = integer("Download retry base delay", value.retryBaseDelayMs, 500, 60_000);
   const retryMaxDelayMs = integer("Download retry maximum delay", value.retryMaxDelayMs, retryBaseDelayMs, 1_800_000);
   const maxFileSizeBytes = value.maxFileSizeBytes === null
@@ -833,6 +850,9 @@ function normalizeDownloadSettings(
     : integer("Download maximum file size", value.maxFileSizeBytes, 1, Number.MAX_SAFE_INTEGER);
   return {
     concurrency,
+    btConcurrency: integer("BitTorrent concurrency", value.btConcurrency === undefined ? 3 : value.btConcurrency, 1, 10),
+    defaultStoragePoolId,
+    defaultTargetDirectory,
     parallelRequestsPerTask: integer("Download parallel requests", value.parallelRequestsPerTask, 1, 8),
     segmentedDownloadMinBytes: integer("Download segmentation threshold", value.segmentedDownloadMinBytes, 1024 * 1024, 1024 ** 4),
     maxAutoRetries: integer("Download automatic retries", value.maxAutoRetries, 0, 20),
