@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -497,6 +497,84 @@ describe("download API", () => {
     expect(stored.json().settings.concurrency).toBe(10);
 
     await app.close();
+  });
+
+  it("persists independent BT concurrency and rejects invalid limits", async () => {
+    const { app } = await setup();
+    const read = () => app.inject({ method: "GET", url: "/api/settings/downloads" });
+    expect((await read()).json().settings).toMatchObject({ concurrency: 1, btConcurrency: 3 });
+    for (const btConcurrency of [1, 10]) {
+      const response = await app.inject({ method: "PATCH", url: "/api/settings/downloads", payload: { btConcurrency } });
+      expect(response.statusCode).toBe(200);
+      expect((await read()).json().settings).toMatchObject({ concurrency: 1, btConcurrency });
+    }
+    for (const btConcurrency of [0, 11, 1.5, null, "invalid"]) {
+      const response = await app.inject({ method: "PATCH", url: "/api/settings/downloads", payload: { btConcurrency } });
+      expect(response.statusCode).toBe(400);
+      expect((await read()).json().settings.btConcurrency).toBe(10);
+    }
+    await app.close();
+  });
+
+  it("normalizes a writable default directory and preserves it during unrelated patches", async () => {
+    const { app, root } = await setup();
+    await mkdir(path.join(root, "Downloads"));
+    const response = await app.inject({
+      method: "PATCH", url: "/api/settings/downloads",
+      payload: { defaultStoragePoolId: poolId, defaultTargetDirectory: "./Downloads/" }
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().settings).toMatchObject({ defaultStoragePoolId: poolId, defaultTargetDirectory: "Downloads" });
+    expect((await app.inject({ method: "PATCH", url: "/api/settings/downloads", payload: { btConcurrency: 5 } })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/api/settings/downloads" })).json().settings)
+      .toMatchObject({ btConcurrency: 5, defaultStoragePoolId: poolId, defaultTargetDirectory: "Downloads" });
+    const cleared = await app.inject({
+      method: "PATCH", url: "/api/settings/downloads",
+      payload: { defaultStoragePoolId: null, defaultTargetDirectory: null }
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().settings).toMatchObject({ defaultStoragePoolId: null, defaultTargetDirectory: null });
+    await app.close();
+  });
+
+  it("rejects incomplete, missing, offline, non-directory, and escaping default locations", async () => {
+    const { app, root } = await setup();
+    await writeFile(path.join(root, "file.bin"), "file");
+    await symlink(tempDir!, path.join(root, "outside"));
+    for (const payload of [
+      { defaultStoragePoolId: poolId },
+      { defaultTargetDirectory: "." },
+      { defaultStoragePoolId: "offline-pool", defaultTargetDirectory: "." },
+      { defaultStoragePoolId: poolId, defaultTargetDirectory: "missing" },
+      { defaultStoragePoolId: poolId, defaultTargetDirectory: "file.bin" },
+      { defaultStoragePoolId: poolId, defaultTargetDirectory: "../" },
+      { defaultStoragePoolId: poolId, defaultTargetDirectory: "outside" }
+    ]) {
+      const response = await app.inject({ method: "PATCH", url: "/api/settings/downloads", payload });
+      expect(response.statusCode, JSON.stringify(payload)).toBeGreaterThanOrEqual(400);
+      expect((await app.inject({ method: "GET", url: "/api/settings/downloads" })).json().settings)
+        .toMatchObject({ defaultStoragePoolId: null, defaultTargetDirectory: null });
+    }
+    await app.close();
+  });
+
+  it("refuses an unwritable default directory without replacing saved settings", async () => {
+    const { app, root } = await setup();
+    await mkdir(path.join(root, "Downloads"));
+    const originalAccess = vi.mocked(access).getMockImplementation()!;
+    vi.mocked(access).mockRejectedValueOnce(Object.assign(new Error("denied"), { code: "EACCES" }));
+    try {
+      const response = await app.inject({
+        method: "PATCH", url: "/api/settings/downloads",
+        payload: { defaultStoragePoolId: poolId, defaultTargetDirectory: "Downloads" }
+      });
+      expect(response.statusCode).toBeGreaterThanOrEqual(400);
+      expect((await app.inject({ method: "GET", url: "/api/settings/downloads" })).json().settings)
+        .toMatchObject({ defaultStoragePoolId: null, defaultTargetDirectory: null });
+    } finally {
+      vi.mocked(access).mockReset().mockImplementation(originalAccess);
+      await app.close();
+    }
   });
 
   it("returns downloader worker health with list snapshots", async () => {

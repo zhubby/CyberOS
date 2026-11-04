@@ -174,6 +174,9 @@ export interface TorrentPreviewDetails extends TorrentPreviewRecord {
 
 export interface DownloadSettingsRecord {
   concurrency: number;
+  btConcurrency: number;
+  defaultStoragePoolId: string | null;
+  defaultTargetDirectory: string | null;
   parallelRequestsPerTask: number;
   segmentedDownloadMinBytes: number;
   maxAutoRetries: number;

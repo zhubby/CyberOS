@@ -2390,6 +2390,9 @@ export async function getDownloadSettings(): Promise<DownloadSettings> {
   const body = (await response.json()) as { settings: DownloadSettings | null };
   return body.settings ?? {
     concurrency: 1,
+    btConcurrency: 3,
+    defaultStoragePoolId: null,
+    defaultTargetDirectory: null,
     parallelRequestsPerTask: 4,
     segmentedDownloadMinBytes: 64 * 1024 * 1024,
     maxAutoRetries: 5,

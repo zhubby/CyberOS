@@ -174,7 +174,9 @@ impl Downloader {
                                 downloader.handle_torrent_preview(engine, preview).await;
                             });
                         }
-                        let torrent_slots = 1_usize.saturating_sub(self.db.torrent_running_count().await?);
+                        // Always allow a seeding task to recover, even when download slots are full.
+                        // Admission also checks the limit atomically before claiming a queued task.
+                        let torrent_slots = settings.bt_concurrency.saturating_sub(self.db.torrent_running_count().await?).max(1);
                         for _ in 0..torrent_slots {
                             let Some(task) = self.db.claim_torrent(&self.worker_id, LEASE).await? else { break };
                             let downloader = self.clone();
