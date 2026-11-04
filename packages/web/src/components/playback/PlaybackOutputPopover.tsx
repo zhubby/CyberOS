@@ -69,7 +69,7 @@ export function PlaybackOutputPopover({ children, busy }: { children: ReactNode;
       <button
         ref={triggerRef}
         type="button"
-        className="icon-button"
+        className="plain-button"
         data-tv-focusable
         aria-label={t("music.output")}
         data-tooltip={t("music.output")}

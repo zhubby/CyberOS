@@ -37,7 +37,7 @@
 .tv-ime-candidates button { min-width: 64px; min-height: 56px; padding: 8px 16px; font-size: 26px; border: 1px solid var(--tv-line); color: var(--tv-text); background: var(--tv-surface); }
 .tv-search-error { display: flex; align-items: center; gap: 20px; color: var(--tv-danger); font-size: 22px; }
 .tv-search-error button, .tv-ime button { min-height: 48px; }
-.tv-library-search { display: flex; align-items: center; gap: 12px; text-align: left; font-size: 22px; color: var(--tv-text); }
+.tv-library-search { display: flex; align-items: center; justify-content: flex-start; gap: 12px; text-align: left; font-size: 22px; color: var(--tv-text); }
 
 .tv-search-header > svg {
   width: 30px;

@@ -557,7 +557,7 @@ export function VideoLibraryPanel({
       />
       {!detail ? (
         <div className="library-search-toolbar" data-tv-region="filters">
-          {tv ? <button type="button" className="plain-button search tv-library-search" data-tv-focusable onClick={onSearch}><Search size={22} aria-hidden="true" />{t("video.search")}</button> : <form className="search" onSubmit={(event) => event.preventDefault()}>
+          {tv ? <button type="button" className="plain-button tv-library-search" data-tv-focusable onClick={onSearch}><Search size={22} aria-hidden="true" />{t("video.search")}</button> : <form className="search" onSubmit={(event) => event.preventDefault()}>
             <Search size={17} aria-hidden="true" />
             <input
               data-tv-focusable

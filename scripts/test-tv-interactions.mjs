@@ -82,6 +82,35 @@ async function snapshot(page, status) {
   }, status);
 }
 
+for (const locale of ["en-US", "zh-CN"]) test(`${locale}: shared playback actions and library search retain HUD styling`, async t => {
+  const { page } = await library(t, { locale });
+  await page.locator(".playback-output > button").waitFor();
+  const failures = await page.evaluate(() => {
+    const failures = [];
+    for (const element of globalThis.document.querySelectorAll("button")) {
+      if (!element.getClientRects().length) continue;
+      const style = globalThis.getComputedStyle(element);
+      if (style.backgroundColor === "rgb(107, 107, 107)") failures.push(`Native gray button: ${element.getAttribute("aria-label")}`);
+    }
+    const search = globalThis.document.querySelector(".tv-library-search");
+    const icon = search.querySelector("svg").getBoundingClientRect();
+    const text = [...search.childNodes].find(node => node.nodeType === globalThis.Node.TEXT_NODE && node.textContent.trim());
+    const range = globalThis.document.createRange();
+    range.selectNode(text);
+    if (icon.right + 6 > range.getBoundingClientRect().left) failures.push("Search icon overlaps its label");
+    if (icon.left > search.getBoundingClientRect().left + 24) failures.push("Search content must remain aligned to the leading edge");
+    return failures;
+  });
+  assert.deepEqual(failures, []);
+  const output = page.locator(".playback-output > button");
+  await page.keyboard.press("Shift");
+  await output.focus();
+  assert.deepEqual(await output.evaluate(element => {
+    const s = globalThis.getComputedStyle(element);
+    return [s.backgroundColor, s.outlineWidth, s.outlineColor, s.outlineOffset];
+  }), ["rgba(0, 0, 0, 0)", "3px", "rgb(0, 240, 255)", "4px"]);
+});
+
 for (const name of ["BrowserHome", "Home", "BrowserBack", "GoBack"]) test(`${name} returns a category to home`, async t => {
   const { page } = await library(t);
   await page.locator(".video-navigation button").nth(1).click();
@@ -217,7 +246,7 @@ test("search failures support retry and detail Back restores search context", as
 
 test("the library search entry opens the same TV keyboard", async t => {
   const { page } = await library(t);
-  await page.locator(".library-search-toolbar .search").click();
+  await page.getByRole("button", { name: "Search library", exact: true }).click();
   await page.locator(".tv-search").waitFor({ timeout: 2000 });
 });
 
