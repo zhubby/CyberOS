@@ -1,0 +1,250 @@
+.tv-app::before,
+.tv-detail::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  pointer-events: none;
+  background:
+    var(--cyberos-hud-scanlines),
+    linear-gradient(90deg, rgb(5 10 14 / 90%) 0 34%, rgb(5 10 14 / 62%) 58%, rgb(5 10 14 / 82%));
+}
+
+.tv-app::after,
+.tv-detail::after {
+  position: fixed;
+  z-index: 12;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: rgb(0 240 255 / 58%);
+  box-shadow: 0 0 16px rgb(0 240 255 / 24%);
+  content: "";
+  pointer-events: none;
+  animation: tv-scan-once var(--cyberos-hud-duration-scan) var(--cyberos-hud-easing) both;
+}
+
+.tv-header {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 88px;
+  padding: 18px 4vw;
+  border-bottom: 1px solid var(--tv-line-emphasis);
+  background:
+    linear-gradient(90deg, rgb(255 0 60 / 10%), transparent 38%),
+    rgb(5 10 14 / 92%);
+  box-shadow: inset 0 -4px 0 rgb(255 0 60 / 5%);
+}
+
+.tv-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 112px;
+  height: 52px;
+  padding: 0 10px;
+  border: 2px solid transparent;
+  border-radius: 0;
+  font-family: var(--cyberos-font-ui);
+  font-size: 28px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: transparent;
+}
+
+.tv-brand img {
+  width: 38px;
+  height: 38px;
+  filter: invert(1) drop-shadow(2px 2px 0 rgb(255 0 60 / 70%));
+}
+
+.tv-header-actions,
+.tv-feature-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tv-icon-button,
+.tv-back-button {
+  display: inline-grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 2px solid var(--tv-line);
+  border-radius: 0;
+  background: rgb(22 13 18 / 90%);
+}
+
+.tv-icon-button svg,
+.tv-back-button svg {
+  width: 26px;
+  height: 26px;
+}
+
+.tv-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 108px;
+  color: var(--tv-muted);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tv-clock svg {
+  width: 21px;
+  height: 21px;
+}
+
+.tv-main,
+.tv-detail {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: none;
+}
+
+.tv-main {
+  padding: 118px 0 90px;
+}
+
+.tv-feature {
+  display: grid;
+  align-content: center;
+  min-height: 38vh;
+  padding: 4vh 4vw 5vh;
+}
+
+.tv-feature > p:first-child,
+.tv-detail-kind {
+  margin: 0 0 10px;
+  color: var(--tv-danger);
+  font-family: var(--cyberos-font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tv-feature h1,
+.tv-detail h1,
+.tv-empty h1,
+.tv-status h1 {
+  max-width: 20ch;
+  margin: 0;
+  font-family: var(--cyberos-font-ui);
+  font-size: 54px;
+  line-height: 1.04;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tv-feature-meta {
+  min-height: 25px;
+  margin-top: 14px;
+  color: var(--tv-muted);
+  font-size: 18px;
+}
+
+.tv-feature-overview,
+.tv-detail-overview {
+  display: -webkit-box;
+  max-width: 64ch;
+  margin: 16px 0 0;
+  overflow: hidden;
+  color: var(--tv-text);
+  font-size: 19px;
+  line-height: 1.52;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.tv-feature-actions {
+  margin-top: 24px;
+}
+
+.tv-primary-action,
+.tv-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 148px;
+  height: 54px;
+  padding: 0 24px;
+  border: 2px solid transparent;
+  border-radius: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.tv-primary-action {
+  color: var(--tv-accent-contrast);
+  border-color: var(--tv-command);
+  background: var(--tv-command);
+  box-shadow: 5px 5px 0 rgb(255 0 60 / 58%);
+}
+
+.tv-secondary-action {
+  border-color: var(--tv-line);
+  background: rgb(22 13 18 / 90%);
+}
+
+.tv-primary-action svg {
+  width: 22px;
+  height: 22px;
+}
+
+.tv-row {
+  margin-top: 38px;
+  padding: 0 4vw;
+}
+
+.tv-row h2,
+.tv-season h2,
+.tv-search-results h2 {
+  margin: 0 0 16px;
+  font-family: var(--cyberos-font-ui);
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tv-poster-strip {
+  display: flex;
+  gap: 20px;
+  width: calc(100% + 4vw);
+  padding: 5px 4vw 14px 4px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+}
+
+.tv-poster {
+  flex: 0 0 var(--tv-poster-width);
+  width: var(--tv-poster-width);
+  min-height: calc(var(--tv-poster-width) * 1.5 + 70px);
+  padding: 0;
+  border: 3px solid transparent;
+  border-radius: 0;
+  text-align: left;
+  scroll-snap-align: start;
+  background: transparent;
+  transition: border-color 150ms ease, transform 150ms ease, background-color 150ms ease;
+}
+
+.tv-poster-art {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border: 1px solid var(--tv-line);
+  border-radius: 0;
+  background: var(--tv-surface-strong);
+}

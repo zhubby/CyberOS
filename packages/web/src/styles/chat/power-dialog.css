@@ -1,0 +1,172 @@
+.power-dialog {
+  display: grid;
+  gap: 16px;
+  width: min(430px, 100%);
+  max-height: calc(100dvh - 40px);
+  padding: 20px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--red);
+  border-radius: 6px;
+  background: var(--dialog-bg);
+  box-shadow: var(--shadow);
+}
+
+.power-dialog-header,
+.power-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.power-dialog-header > div {
+  min-width: 0;
+}
+
+.power-dialog-header h2 {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.power-dialog-header .icon-button {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 0;
+}
+
+.power-dialog-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.power-action-list {
+  display: grid;
+  gap: 8px;
+}
+
+.power-action-option {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
+  text-align: left;
+}
+
+.power-action-option > svg {
+  justify-self: center;
+  color: var(--danger-ui-text);
+}
+
+.power-action-option > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.power-action-option strong,
+.power-action-option small {
+  overflow-wrap: anywhere;
+}
+
+.power-action-option strong {
+  font-size: 13px;
+}
+
+.power-action-option small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.power-dialog-warning {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  color: var(--danger-text);
+  background: var(--danger-bg-soft);
+}
+
+.power-dialog-warning > svg {
+  margin-top: 1px;
+}
+
+.power-dialog-warning p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.power-dialog-warning span {
+  display: block;
+  margin-top: 6px;
+  color: var(--danger-text);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.power-dialog footer {
+  justify-content: flex-end;
+}
+
+.power-dialog footer button {
+  min-width: 96px;
+}
+
+.power-confirm-button {
+  white-space: nowrap;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .agent-power-button:hover:not(:disabled) {
+    border-color: var(--danger-border-hover);
+    color: var(--danger-strong-text);
+    background: var(--danger-bg);
+    box-shadow: var(--control-hover-shadow);
+  }
+
+  .power-action-option:hover:not(:disabled) {
+    border-color: var(--danger-border-hover);
+    background: var(--surface-hover);
+    box-shadow: var(--control-hover-shadow);
+  }
+}
+
+@media (max-width: 520px) {
+  .power-dialog-backdrop {
+    padding: 10px;
+  }
+
+  .power-dialog {
+    max-height: calc(100dvh - 20px);
+    padding: 16px;
+  }
+
+  .power-dialog footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .power-dialog footer button {
+    min-width: 0;
+    width: 100%;
+  }
+}

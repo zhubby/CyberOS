@@ -1,0 +1,36 @@
+/* Terminal and code surfaces */
+
+.workspace-terminal-frame,
+.workspace-terminal-stage,
+.workspace-terminal-view,
+.xterm,
+.editor-code-surface,
+.message-code-block,
+.markdown-code-block {
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+}
+
+.workspace-terminal-frame {
+  border: 2px solid var(--cyber-ink);
+  box-shadow: 5px 5px 0 var(--cyber-red);
+}
+
+.workspace-terminal-tabbar,
+.workspace-terminal-tabs {
+  border-bottom: 1px solid rgb(252 238 10 / 34%);
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+}
+
+.workspace-terminal-tab[aria-selected="true"] {
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: inset 0 -3px 0 var(--cyber-red);
+}
+
+.workspace-terminal-notice {
+  border: 1px solid var(--cyber-red);
+  color: #fff;
+  background: rgb(255 0 60 / 18%);
+}

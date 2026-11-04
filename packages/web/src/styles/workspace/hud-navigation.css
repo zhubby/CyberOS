@@ -1,0 +1,49 @@
+.mobile-tabs {
+  border-bottom-color: var(--hud-red);
+  background: var(--hud-void);
+}
+
+.mobile-tab-buttons {
+  border-color: var(--hud-line);
+  background: var(--hud-deep);
+}
+
+.mobile-tab-buttons button {
+  color: var(--hud-muted);
+  background: transparent;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.mobile-tab-buttons button.is-active {
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: inset 0 -3px 0 var(--hud-red);
+}
+
+@keyframes hud-scan-once {
+  from {
+    top: 0;
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.82;
+  }
+  to {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes hud-panel-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

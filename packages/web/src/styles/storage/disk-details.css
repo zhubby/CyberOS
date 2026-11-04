@@ -1,0 +1,315 @@
+.management-modal.storage-pool-modal {
+  width: min(620px, 100%);
+  max-height: min(730px, calc(100dvh - 36px));
+}
+
+.storage-pool-details-modal {
+  width: min(640px, 100%);
+  max-height: min(760px, calc(100dvh - 28px));
+  border-top: 3px solid var(--accent);
+}
+
+.storage-pool-details-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px 10px;
+}
+
+.storage-pool-details-heading .eyebrow {
+  grid-column: 1 / -1;
+}
+
+.storage-pool-details-heading h2 {
+  min-width: 0;
+}
+
+.storage-disk-details-modal {
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100dvh - 28px));
+  border-top: 3px solid var(--accent);
+}
+
+.storage-disk-details-heading {
+  display: grid;
+  gap: 4px 12px;
+}
+
+.storage-disk-details-heading .eyebrow {
+  grid-column: 1 / -1;
+}
+
+.storage-disk-details-heading h2 {
+  min-width: 0;
+}
+
+.storage-disk-details-body {
+  display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.storage-disk-capacity-overview {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--channel-bg);
+}
+
+.storage-disk-capacity-chart {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+
+.storage-disk-capacity-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 3px;
+  pointer-events: none;
+  text-align: center;
+}
+
+.storage-disk-capacity-center strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.storage-disk-capacity-center span {
+  color: var(--muted-2);
+  font-size: 9px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.storage-disk-capacity-summary {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.storage-disk-capacity-summary > strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-disk-capacity-summary > p {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.storage-disk-capacity-summary dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.storage-disk-capacity-summary dl > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 7px;
+  border-top: 2px solid var(--surface-strong);
+}
+
+.storage-disk-capacity-summary dl > div:first-child {
+  border-color: var(--accent);
+}
+
+.storage-disk-capacity-summary dt {
+  color: var(--muted-2);
+  font-size: 9.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.storage-disk-capacity-summary dd {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-smart-status-chart {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+}
+
+.storage-smart-status-chart.is-detail {
+  width: 62px;
+  height: 62px;
+  flex-basis: 62px;
+}
+
+.storage-smart-status-chart > svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: var(--neutral-status-text);
+  transform: translate(-50%, -50%);
+}
+
+.storage-smart-status-chart[data-state="ready"] > svg {
+  color: var(--success-text);
+}
+
+.storage-smart-status-chart[data-state="danger"] > svg {
+  color: var(--danger-text);
+}
+
+.storage-disk-detail-section {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--channel-bg);
+}
+
+.storage-disk-detail-section > header {
+  min-height: 54px;
+  padding: 10px 12px;
+  background: var(--subtle-bg);
+}
+
+.storage-disk-detail-section > header h3 {
+  margin-top: 3px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.storage-disk-detail-section > header > strong {
+  color: var(--muted-2);
+  font-size: 12px;
+}
+
+.storage-disk-smart-section > header {
+  justify-content: flex-start;
+}
+
+.storage-disk-smart-section > header p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.storage-disk-smart-section h4 {
+  padding: 11px 12px 0;
+  color: var(--text);
+  font-size: 11.5px;
+}
+
+.storage-disk-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px 6px 6px;
+}
+
+.storage-disk-detail-facts > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 8px;
+  background: var(--subtle-bg);
+}
+
+.storage-disk-detail-facts span {
+  color: var(--muted-2);
+  font-size: 9.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.storage-disk-detail-facts strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-disk-smart-message,
+.storage-disk-detail-empty {
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.storage-disk-smart-message {
+  margin: 0 6px 6px;
+  border: 1px solid var(--danger-border);
+  border-radius: 5px;
+  color: var(--danger-text);
+  background: var(--danger-bg-soft);
+}
+
+.storage-disk-table-wrap {
+  min-width: 0;
+  overflow: auto;
+}
+
+.storage-disk-details-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  color: var(--muted);
+  font-size: 11px;
+  table-layout: fixed;
+}
+
+.storage-disk-details-table th,
+.storage-disk-details-table td {
+  overflow: hidden;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--table-border);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-disk-details-table th {
+  color: var(--muted-2);
+  background: var(--row-head-bg);
+  font-size: 9.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.storage-disk-details-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.storage-disk-details-table tbody tr[data-state="danger"] td {
+  color: var(--danger-text);
+  background: var(--danger-bg-soft);
+}

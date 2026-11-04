@@ -1,0 +1,102 @@
+/* Workspace rail, tables, and operational panels */
+
+.workspace-panel-tab {
+  position: relative;
+  border: 1px solid transparent;
+}
+
+.workspace-panel-tab::after {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 5px;
+  height: 2px;
+  background: rgb(252 238 10 / 30%);
+  content: "";
+}
+
+.workspace-panel-tab.is-active::after {
+  background: var(--cyber-red);
+}
+
+.file-browser,
+.management-dashboard-widget,
+.management-section,
+.management-metric,
+.download-task,
+.approval-card,
+.settings-section-card,
+.settings-policy-row {
+  border: 1px solid var(--cyber-ink);
+  border-radius: 0;
+  background: rgb(252 238 10 / 86%);
+  box-shadow: 4px 4px 0 rgb(5 10 14 / 88%);
+}
+
+.file-browser {
+  border-width: 2px;
+  box-shadow: 5px 5px 0 var(--cyber-ink);
+}
+
+.file-row {
+  position: relative;
+  border-bottom: 1px solid rgb(5 10 14 / 38%);
+  background: transparent;
+}
+
+.file-row-head {
+  border-bottom: 2px solid var(--cyber-ink);
+  font-size: 9px;
+}
+
+.file-row:not(.file-row-head):hover {
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+}
+
+.file-row:not(.file-row-head):hover :where(button, span, time, code) {
+  color: inherit;
+}
+
+.file-row.is-selected,
+.file-row[aria-selected="true"] {
+  box-shadow: inset 5px 0 0 var(--cyber-red);
+}
+
+.file-row.is-selected::before,
+.file-row[aria-selected="true"]::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  background: var(--cyber-red);
+  content: "";
+}
+
+.file-action-button,
+.preview-tool-button,
+.management-row-action {
+  border-color: currentColor;
+  color: var(--cyber-ink);
+  background: transparent;
+}
+
+.file-action-button:hover:not(:disabled),
+.preview-tool-button:hover:not(:disabled),
+.management-row-action:hover:not(:disabled) {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-ink);
+  background: var(--cyber-cyan);
+}
+
+.file-action-button-send {
+  border-color: var(--cyber-red);
+  color: var(--cyber-red);
+  background: transparent;
+}
+
+.file-action-button-send:hover:not(:disabled) {
+  color: #fff;
+  background: var(--cyber-red);
+}

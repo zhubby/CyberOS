@@ -1,0 +1,27 @@
+@media (max-width: 560px) {
+
+  .activity-popover {
+    position: fixed;
+    top: 62px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-width: none;
+  }
+
+  .activity-popover {
+    max-height: calc(100dvh - 92px);
+  }
+
+  .activity-upload-list {
+    max-height: 250px;
+  }
+
+  .activity-operation-list {
+    max-height: 180px;
+  }
+
+  .activity-upload-head {
+    align-items: flex-start;
+  }
+}

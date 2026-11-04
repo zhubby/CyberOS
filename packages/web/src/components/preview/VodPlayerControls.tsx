@@ -1,3 +1,4 @@
+import { CustomSelect } from "../common/CustomSelect.js";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -118,36 +119,29 @@ export function VodPlayerControls({ status, busy, onCommand, onRetry }: {
             <label>
               <ListMusic aria-hidden="true" size={15} />
               <span className="visually-hidden">{t("preview.vodPlayer.audioTrack")}</span>
-              <select
-                value={status.selectedAudioTrackId ?? ""}
+              <CustomSelect
+                value={String(status.selectedAudioTrackId ?? "")}
                 disabled={controlsDisabled}
-                aria-label={t("preview.vodPlayer.audioTrack")}
-                onChange={(event) => command({ type: "set-audio-track", trackId: Number(event.target.value) })}
-              >
-                {status.audioTracks.map((track, index) => (
-                  <option key={track.id} value={track.id}>{trackLabel(track, index, t("preview.vodPlayer.audioTrack"))}</option>
-                ))}
-              </select>
+                ariaLabel={t("preview.vodPlayer.audioTrack")}
+                onChange={(selectedValue) => command({ type: "set-audio-track", trackId: Number(selectedValue) })}
+                options={status.audioTracks.map((track, index) => ({ value: String(track.id), label: trackLabel(track, index, t("preview.vodPlayer.audioTrack")) }))}
+              />
             </label>
           ) : null}
           {status.subtitleTracks.length > 0 ? (
             <label>
               <Captions aria-hidden="true" size={15} />
               <span className="visually-hidden">{t("preview.vodPlayer.subtitleTrack")}</span>
-              <select
-                value={status.selectedSubtitleTrackId ?? "off"}
+              <CustomSelect
+                value={String(status.selectedSubtitleTrackId ?? "off")}
                 disabled={controlsDisabled}
-                aria-label={t("preview.vodPlayer.subtitleTrack")}
-                onChange={(event) => command({
+                ariaLabel={t("preview.vodPlayer.subtitleTrack")}
+                onChange={(selectedValue) => command({
                   type: "set-subtitle-track",
-                  trackId: event.target.value === "off" ? null : Number(event.target.value)
+                  trackId: selectedValue === "off" ? null : Number(selectedValue)
                 })}
-              >
-                <option value="off">{t("preview.vodPlayer.subtitleOff")}</option>
-                {status.subtitleTracks.map((track, index) => (
-                  <option key={track.id} value={track.id}>{trackLabel(track, index, t("preview.vodPlayer.subtitleTrack"))}</option>
-                ))}
-              </select>
+                options={[{ value: "off", label: t("preview.vodPlayer.subtitleOff") }, ...(status.subtitleTracks.map((track, index) => ({ value: String(track.id), label: trackLabel(track, index, t("preview.vodPlayer.subtitleTrack")) })))]}
+              />
             </label>
           ) : null}
         </div>

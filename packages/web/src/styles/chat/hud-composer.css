@@ -1,0 +1,107 @@
+.composer {
+  gap: 8px;
+  margin: 0 14px 14px;
+  padding: 12px;
+  border: 1px solid var(--hud-line);
+  border-left: 3px solid var(--hud-yellow);
+  color: var(--hud-text);
+  background:
+    linear-gradient(90deg, rgb(255 51 95 / 6%) 1px, transparent 1px),
+    var(--hud-panel);
+  background-size: 28px 100%, auto;
+  box-shadow: 5px 5px 0 rgb(255 51 95 / 22%);
+}
+
+.composer::before {
+  top: -1px;
+  right: 18px;
+  width: 72px;
+  height: 2px;
+  background: var(--hud-cyan);
+  box-shadow: 0 0 10px rgb(51 230 242 / 34%);
+}
+
+.composer textarea {
+  min-height: 68px;
+  color: var(--hud-text) !important;
+  caret-color: var(--hud-cyan);
+}
+
+.composer textarea::placeholder {
+  color: var(--hud-dim) !important;
+}
+
+.composer :where(.composer-model-config, .composer-meta) {
+  color: var(--hud-muted);
+}
+
+.composer .composer-model-config svg {
+  color: var(--hud-cyan);
+}
+
+.composer-status {
+  color: var(--hud-yellow);
+}
+
+.composer-status[data-state="running"] {
+  color: var(--hud-cyan);
+}
+
+.composer-status[data-state="reconnecting"] {
+  color: var(--hud-red);
+}
+
+.composer-path-block {
+  border-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-cyan-soft);
+}
+
+.composer .secondary-button,
+.composer .primary-button {
+  border-color: var(--hud-yellow);
+  color: var(--hud-yellow);
+  background: transparent;
+  box-shadow: none;
+}
+
+.composer .primary-button {
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.composer .secondary-button:hover:not(:disabled) {
+  border-color: var(--hud-cyan);
+  color: var(--hud-void);
+  background: var(--hud-cyan);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.composer .primary-button:hover:not(:disabled) {
+  border-color: var(--hud-yellow);
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: 5px 5px 0 var(--hud-red);
+}
+
+.composer :where(.secondary-button, .primary-button):disabled {
+  border-color: var(--hud-line-soft);
+  color: var(--hud-dim);
+  background: rgb(255 255 255 / 2%);
+  box-shadow: none;
+}
+
+.composer-delivery {
+  border-color: var(--hud-line);
+  background: var(--hud-void);
+}
+
+.composer-delivery button {
+  color: var(--hud-muted);
+}
+
+.composer-delivery button.is-active {
+  color: var(--hud-void);
+  background: var(--hud-cyan);
+}

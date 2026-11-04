@@ -1,0 +1,126 @@
+.workspace-stage[data-panel="files"] .workspace-grid {
+  padding: 12px 14px 16px;
+}
+
+.workspace-stage[data-panel="files"] .file-browser {
+  border: 1px solid var(--hud-line);
+  color: var(--hud-text);
+  background: var(--hud-panel);
+  box-shadow: 5px 5px 0 rgb(255 51 95 / 20%);
+}
+
+.files-list-header {
+  min-height: 58px;
+  border-bottom: 1px solid var(--hud-line);
+  background:
+    linear-gradient(90deg, rgb(255 51 95 / 8%), transparent 50%),
+    var(--hud-panel-raised);
+}
+
+.files-content-breadcrumbs {
+  color: var(--hud-text);
+}
+
+.files-content-breadcrumbs button {
+  color: var(--hud-cyan);
+}
+
+.files-content-breadcrumbs button:hover:not(:disabled) {
+  color: var(--hud-yellow);
+}
+
+.files-content-breadcrumbs button[aria-current="page"] {
+  color: var(--hud-yellow);
+}
+
+.files-list-summary {
+  color: var(--hud-muted);
+}
+
+.workspace-stage[data-panel="files"] .file-row {
+  border-bottom-color: var(--hud-line-soft);
+  color: var(--hud-muted);
+  background: transparent;
+}
+
+.workspace-stage[data-panel="files"] .file-row-head {
+  border-bottom: 1px solid var(--hud-red);
+  color: var(--hud-cyan);
+  background: var(--hud-void);
+}
+
+.workspace-stage[data-panel="files"] .file-row:not(.file-row-head):hover,
+.workspace-stage[data-panel="files"] .file-row:not(.file-row-head):focus-visible {
+  color: var(--hud-text);
+  background: linear-gradient(90deg, rgb(51 230 242 / 10%), transparent 76%);
+  box-shadow: inset 3px 0 0 var(--hud-cyan);
+}
+
+.workspace-stage[data-panel="files"] .file-row.is-previewed,
+.workspace-stage[data-panel="files"] .file-row.is-batch-selected,
+.workspace-stage[data-panel="files"] .file-row[aria-selected="true"] {
+  color: var(--hud-text);
+  background: linear-gradient(90deg, rgb(255 51 95 / 15%), transparent 72%);
+  box-shadow: inset 5px 0 0 var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .file-name > svg {
+  color: var(--hud-cyan);
+}
+
+.workspace-stage[data-panel="files"] .file-row.is-batch-selected .file-name > svg {
+  color: var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .file-action-button {
+  border-color: var(--hud-line-soft);
+  color: var(--hud-muted);
+  background: var(--hud-void);
+}
+
+.workspace-stage[data-panel="files"] .file-action-button:hover:not(:disabled) {
+  border-color: var(--hud-cyan);
+  color: var(--hud-void);
+  background: var(--hud-cyan);
+}
+
+.workspace-stage[data-panel="files"] .file-action-button.is-danger {
+  color: var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .file-action-button.is-danger:hover:not(:disabled) {
+  border-color: var(--hud-red);
+  color: var(--hud-void);
+  background: var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .workspace-empty-state {
+  align-self: center;
+  width: min(410px, calc(100% - 32px));
+  min-height: 210px;
+  margin: auto;
+  border: 0;
+  border-block: 1px solid var(--hud-line);
+  color: var(--hud-muted);
+  background:
+    linear-gradient(90deg, transparent, rgb(255 51 95 / 7%) 50%, transparent);
+  box-shadow: none;
+}
+
+.workspace-stage[data-panel="files"] .workspace-empty-state > svg {
+  border-color: var(--hud-cyan);
+  color: var(--hud-cyan);
+  background: var(--hud-void);
+  box-shadow: 3px 3px 0 var(--hud-red);
+}
+
+.workspace-stage[data-panel="files"] .workspace-empty-state strong {
+  color: var(--hud-text);
+}
+
+.workspace-stage[data-panel="files"] .workspace-empty-state .secondary-button {
+  border-color: var(--hud-yellow);
+  color: var(--hud-void);
+  background: var(--hud-yellow);
+  box-shadow: 4px 4px 0 var(--hud-red);
+}

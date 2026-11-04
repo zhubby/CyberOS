@@ -143,7 +143,7 @@ export function MusicLibraryPanel({
   const playlistChoicesRequestId = useRef(0);
   const playlistChoicesController = useRef<AbortController | null>(null);
   const playlistChoicesSession = useRef(0);
-  const playlistChoiceSelect = useRef<HTMLSelectElement | null>(null);
+  const playlistChoiceSelect = useRef<HTMLButtonElement | null>(null);
   const playlistChoicesMore = useRef<HTMLButtonElement | null>(null);
   const playlistChoicesCreate = useRef<HTMLButtonElement | null>(null);
   const reload = () => setRefreshVersion((current) => current + 1);
@@ -592,7 +592,7 @@ export function MusicLibraryPanel({
         <article className="music-album" key={album.id}>
           <button
             type="button"
-            className="music-album-open"
+            className="plain-button music-album-open"
             onClick={() => openDetail("album", album.id, album.title)}
           >
             <MusicCover coverKey={album.coverKey} />
@@ -601,7 +601,7 @@ export function MusicLibraryPanel({
               {album.artists.join(" · ") || t("music.unknownArtist")}
             </small>
           </button>
-          <div className="music-album-meta">
+          <div className="music-album-meta metadata">
             <span>{album.year ?? "—"}</span>
             <button
               type="button"
@@ -609,7 +609,7 @@ export function MusicLibraryPanel({
               data-tooltip={t("music.favorite")}
               aria-pressed={album.favorite}
               disabled={busy}
-              onClick={() => favorite("album", album)}
+              onClick={() => favorite("album", album)} className="plain-button"
             >
               <Heart
                 size={14}
@@ -627,7 +627,7 @@ export function MusicLibraryPanel({
         <div className="music-artist" key={artist.id}>
           <button
             type="button"
-            onClick={() => openDetail("artist", artist.id, artist.name)}
+            onClick={() => openDetail("artist", artist.id, artist.name)} className="plain-button"
           >
             <MusicCover coverKey={artist.coverKey} />
             <span>
@@ -646,7 +646,7 @@ export function MusicLibraryPanel({
             onClick={() => favorite("artist", artist)}
             aria-label={t("music.favorite")}
             data-tooltip={t("music.favorite")}
-            aria-pressed={artist.favorite}
+            aria-pressed={artist.favorite} className="plain-button"
           >
             <Heart size={16} fill={artist.favorite ? "currentColor" : "none"} />
           </button>
@@ -673,7 +673,7 @@ export function MusicLibraryPanel({
           >
             <button
               type="button"
-              className="music-track-play"
+              className="plain-button music-track-play"
               disabled={track.missing || remote.busy || loading}
               aria-label={t("music.playTrack", { title: track.title })}
               data-tooltip={t("music.playTrack", { title: track.title })}
@@ -694,7 +694,7 @@ export function MusicLibraryPanel({
             </div>
             <button
               type="button"
-              className="music-track-album"
+              className="plain-button music-track-album"
               data-tooltip={track.album}
               onClick={() => openDetail("album", track.albumId, track.album)}
             >
@@ -706,7 +706,7 @@ export function MusicLibraryPanel({
             <button
               type="button"
               disabled={busy}
-              className="music-track-favorite"
+              className="plain-button music-track-favorite"
               aria-label={t("music.favorite")}
               data-tooltip={t("music.favorite")}
               aria-pressed={track.favorite}
@@ -723,7 +723,7 @@ export function MusicLibraryPanel({
                   type="button"
                   disabled={loading || busy || index === 0}
                   onClick={() => playlistReorder(index, -1)}
-                  className="music-track-reorder"
+                  className="plain-button music-track-reorder"
                   aria-label={t("music.moveUp")}
                   data-tooltip={t("music.moveUp")}
                   data-music-reorder="up"
@@ -734,7 +734,7 @@ export function MusicLibraryPanel({
                   type="button"
                   disabled={loading || busy || index === tracks.length - 1}
                   onClick={() => playlistReorder(index, 1)}
-                  className="music-track-reorder"
+                  className="plain-button music-track-reorder"
                   aria-label={t("music.moveDown")}
                   data-tooltip={t("music.moveDown")}
                   data-music-reorder="down"
@@ -756,7 +756,7 @@ export function MusicLibraryPanel({
                 aria-label={t("music.trackActions")}
                 data-tooltip={t("music.trackActions")}
                 aria-expanded={rowMenu === rowKey}
-                onClick={() => setRowMenu(rowMenu === rowKey ? null : rowKey)}
+                onClick={() => setRowMenu(rowMenu === rowKey ? null : rowKey)} className="plain-button"
               >
                 <Plus size={17} />
               </button>
@@ -768,7 +768,7 @@ export function MusicLibraryPanel({
                     onClick={() => {
                       play([track], "insert-next");
                       setRowMenu(null);
-                    }}
+                    }} className="plain-button"
                   >
                     <SkipForward size={14} />
                     {t("music.playNext")}
@@ -779,12 +779,12 @@ export function MusicLibraryPanel({
                     onClick={() => {
                       play([track], "append");
                       setRowMenu(null);
-                    }}
+                    }} className="plain-button"
                   >
                     <ListMusic size={14} />
                     {t("music.append")}
                   </button>
-                  <button type="button" onClick={() => openAdd(track, rowKey)}>
+                  <button type="button" onClick={() => openAdd(track, rowKey)} className="plain-button">
                     <Plus size={14} />
                     {t("music.addToPlaylist")}
                   </button>
@@ -805,7 +805,7 @@ export function MusicLibraryPanel({
                             },
                           ),
                         );
-                      }}
+                      }} className="plain-button"
                     >
                       <Trash2 size={14} />
                       {t("music.remove")}
@@ -909,14 +909,14 @@ export function MusicLibraryPanel({
           </label>
         </SearchFilterPopover>
       </div>
-      <nav className="music-tabs" aria-label={t("music.navigation")}>
+      <nav className="music-tabs view-tabs" aria-label={t("music.navigation")}>
         {(["home", "albums", "artists", "tracks", "playlists"] as const).map(
           (tab) => (
             <button
               key={tab}
               type="button"
               aria-current={view === tab && !detail ? "page" : undefined}
-              className={view === tab && !detail ? "is-active" : ""}
+              className={`plain-button ${view === tab && !detail ? "is-active" : ""}`}
               onClick={() => {
                 setLoading(true);
                 setContent(EMPTY);
@@ -936,7 +936,7 @@ export function MusicLibraryPanel({
         {error ? (
           <div className="music-error" role="alert">
             {error}
-            <button type="button" onClick={reload}>
+            <button type="button" onClick={reload} className="plain-button">
               {t("common.actions.refresh")}
             </button>
           </div>
@@ -949,7 +949,7 @@ export function MusicLibraryPanel({
         ) : null}
         {library?.scans.some((scan) => scan.status === "failed") ? (
           <button
-            className="music-scan-warning"
+            className="plain-button music-scan-warning"
             type="button"
             onClick={onOpenSettings}
           >
@@ -959,7 +959,7 @@ export function MusicLibraryPanel({
         {detail ? (
           <>
             <button
-              className="music-back"
+              className="plain-button music-back"
               type="button"
               onClick={() => {
                 setLoading(true);
@@ -1013,7 +1013,7 @@ export function MusicLibraryPanel({
                             .map((track) => track.id),
                         });
                       })()
-                    }
+                    } className="plain-button"
                   >
                     <Shuffle size={15} />
                     {t("music.shuffle")}
@@ -1021,7 +1021,7 @@ export function MusicLibraryPanel({
                   <button
                     type="button"
                     disabled={loading || remote.busy || !content.tracks.length}
-                    onClick={() => play(content.tracks, "append")}
+                    onClick={() => play(content.tracks, "append")} className="plain-button"
                   >
                     <Plus size={15} />
                     {t("music.append")}
@@ -1030,7 +1030,7 @@ export function MusicLibraryPanel({
                     <>
                       <button
                         type="button"
-                        onClick={() => setNameDialog("rename")}
+                        onClick={() => setNameDialog("rename")} className="plain-button"
                       >
                         {t("music.rename")}
                       </button>
@@ -1038,7 +1038,7 @@ export function MusicLibraryPanel({
                         type="button"
                         onClick={() =>
                           setConfirmDelete(detail.id)
-                        }
+                        } className="plain-button"
                       >
                         <Trash2 size={15} />
                         {t("common.actions.delete")}
@@ -1054,7 +1054,7 @@ export function MusicLibraryPanel({
                 {content.albumsNextCursor ? (
                   <button
                     type="button"
-                    className="music-load-more"
+                    className="plain-button music-load-more"
                     disabled={loading}
                     onClick={() => void loadCollectionMore("albums")}
                   >
@@ -1089,7 +1089,7 @@ export function MusicLibraryPanel({
             {detail.kind === "artist" && content.tracksNextCursor ? (
               <button
                 type="button"
-                className="music-load-more"
+                className="plain-button music-load-more"
                 disabled={loading}
                 onClick={() => void loadCollectionMore("tracks")}
               >
@@ -1117,7 +1117,7 @@ export function MusicLibraryPanel({
                   onClick={() => {
                     setView("tracks");
                     setFilters((current) => ({ ...current, favorite: true }));
-                  }}
+                  }} className="plain-button"
                 >
                   {t("music.showAll")}
                 </button>
@@ -1135,7 +1135,7 @@ export function MusicLibraryPanel({
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={() => void loadCollectionMore("albums")}
+                  onClick={() => void loadCollectionMore("albums")} className="plain-button"
                 >
                   {t("music.loadMoreAlbums")}
                 </button>
@@ -1153,7 +1153,7 @@ export function MusicLibraryPanel({
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={() => void loadCollectionMore("artists")}
+                  onClick={() => void loadCollectionMore("artists")} className="plain-button"
                 >
                   {t("music.loadMoreArtists")}
                 </button>
@@ -1171,7 +1171,7 @@ export function MusicLibraryPanel({
                 <button
                   type="button"
                   disabled={loading}
-                  onClick={() => void loadCollectionMore("tracks")}
+                  onClick={() => void loadCollectionMore("tracks")} className="plain-button"
                 >
                   {t("music.loadMoreTracks")}
                 </button>
@@ -1185,7 +1185,7 @@ export function MusicLibraryPanel({
           <>
             <div className="music-section-heading">
               <h3>{t("music.views.playlists")}</h3>
-              <button type="button" onClick={() => setNameDialog("create")}>
+              <button type="button" onClick={() => setNameDialog("create")} className="plain-button">
                 <Plus size={16} />
                 {t("music.newPlaylist")}
               </button>
@@ -1197,7 +1197,7 @@ export function MusicLibraryPanel({
                   key={playlist.id}
                   onClick={() =>
                     openDetail("playlist", playlist.id, playlist.name)
-                  }
+                  } className="plain-button"
                 >
                   <ListMusic size={22} />
                   <span>
@@ -1238,7 +1238,7 @@ export function MusicLibraryPanel({
         {loading && empty ? <PanelContentSkeleton /> : null}
         {content.nextCursor && !detail ? (
           <button
-            className="music-load-more"
+            className="plain-button music-load-more"
             type="button"
             disabled={loading}
             onClick={() => void load(content.nextCursor!)}
@@ -1259,7 +1259,7 @@ export function MusicLibraryPanel({
             <button
               type="button"
               disabled={busy}
-              onClick={() => setConfirmDelete(null)}
+              onClick={() => setConfirmDelete(null)} className="secondary-button"
             >
               {t("common.actions.cancel")}
             </button>
@@ -1304,19 +1304,15 @@ export function MusicLibraryPanel({
         <MusicDialog title={t("music.addToPlaylist")} onClose={closeAdd}>
           <label className="music-field">
             {addTrack.title}
-            <select
-              ref={playlistChoiceSelect}
+            <CustomSelect
+              triggerRef={playlistChoiceSelect}
               value={targetPlaylistId}
               disabled={!playlistChoices.length || busy}
-              aria-busy={playlistChoicesLoading}
-              onChange={(event) => setTargetPlaylistId(event.target.value)}
-            >
-              {playlistChoices.map((playlist) => (
-                <option key={playlist.id} value={playlist.id}>
-                  {playlist.name}
-                </option>
-              ))}
-            </select>
+              ariaBusy={playlistChoicesLoading}
+              onChange={(selectedValue) => setTargetPlaylistId(selectedValue)}
+              ariaLabel={addTrack.title}
+              options={playlistChoices.map((playlist) => ({ value: playlist.id, label: playlist.name }))}
+            />
           </label>
           {playlistChoicesError ? (
             <p role="alert" className="music-error">
@@ -1334,7 +1330,7 @@ export function MusicLibraryPanel({
               onClick={() => {
                 if (!playlistChoicesLoading && !busy)
                   void loadPlaylistChoices(playlistChoicesCursor ?? undefined);
-              }}
+              }} className="plain-button"
             >
               {playlistChoicesLoading
                 ? t("common.states.loading")
@@ -1356,7 +1352,7 @@ export function MusicLibraryPanel({
               onClick={() => {
                 closeAdd();
                 setNameDialog("create");
-              }}
+              }} className="plain-button"
             >
               {t("music.newPlaylist")}
             </button>

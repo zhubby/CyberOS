@@ -448,15 +448,9 @@
   color: var(--muted);
 }
 
-.vod-player-tracks select {
+.vod-player-tracks .custom-select {
   width: 100%;
   min-width: 0;
-  height: 30px;
-  padding: 0 7px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--text);
-  background: var(--surface);
 }
 
 .vod-player-actions .is-primary {

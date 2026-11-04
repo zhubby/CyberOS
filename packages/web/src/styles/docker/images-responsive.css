@@ -1,0 +1,100 @@
+@media (max-width: 560px) {
+  .docker-registry-list-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .docker-image-table,
+  .docker-image-table tbody {
+    display: block;
+    min-width: 0;
+  }
+
+  .docker-image-table thead {
+    display: none;
+  }
+
+  .docker-image-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(100px, auto);
+    gap: 7px 12px;
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .docker-image-table td,
+  .docker-image-table td:nth-child(n) {
+    display: grid;
+    grid-template-columns: minmax(82px, 0.55fr) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 8px;
+    width: auto;
+    padding: 0;
+    overflow: visible;
+    text-align: right;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .docker-image-table td::before {
+    color: var(--muted-2);
+    content: attr(data-label);
+    font-size: 9.5px;
+    font-family: var(--font-emphasis);
+    font-weight: 800;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .docker-image-table td:first-child {
+    grid-column: 1 / -1;
+    display: block;
+    text-align: left;
+  }
+
+  .docker-image-table td:first-child::before {
+    display: none;
+  }
+
+  .docker-image-table td:nth-child(2),
+  .docker-image-table td:nth-child(3),
+  .docker-image-table td:nth-child(4),
+  .docker-image-table td:nth-child(5),
+  .docker-image-table td:nth-child(6) {
+    grid-column: 1 / -1;
+  }
+
+  .docker-image-detail-dialog,
+  .docker-image-pull-dialog,
+  .docker-registry-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+  }
+
+  .docker-image-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .docker-image-detail-grid > div:first-child {
+    grid-column: auto;
+  }
+
+  .docker-registry-list article {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+  }
+
+  .docker-registry-list article > em {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .docker-registry-list article > .management-action-cluster {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .docker-image-dialog-footer button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}

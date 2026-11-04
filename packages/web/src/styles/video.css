@@ -11,36 +11,10 @@
 .video-panel > .video-content {
   grid-row: 5;
 }
-.video-panel button,
-.playback-shell button,
-.browser-player button {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--line);
-  color: var(--text);
-  background: var(--surface);
-  padding: 6px 10px;
-  cursor: pointer;
-  border-radius: 0;
-}
-.video-panel button:hover,
-.playback-shell button:hover,
-.browser-player button:hover {
-  border-color: var(--cyber-cyan);
-}
 .video-panel button[aria-pressed="true"] {
   background: var(--accent);
   color: var(--app-bg);
   border-left: 3px solid var(--red);
-}
-.video-panel button:disabled:not([aria-busy="true"]),
-.playback-shell button:disabled,
-.browser-player button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 .video-navigation {
   display: flex;
@@ -58,9 +32,6 @@
   flex-shrink: 0;
 }
 .video-panel input,
-.video-panel select,
-.browser-player select,
-.playback-output select,
 .playback-output input {
   min-width: 0;
   min-height: 34px;
@@ -70,6 +41,12 @@
   color: var(--text);
   border-radius: 0;
   padding: 5px 8px;
+}
+.video-panel .custom-select,
+.browser-player .custom-select,
+.playback-output .custom-select {
+  min-width: 0;
+  max-width: 100%;
 }
 .video-content {
   min-height: 0;
@@ -162,12 +139,11 @@
   font-size: 22px;
   overflow-wrap: anywhere;
 }
-.video-detail-main p {
+.video-detail-main p:not(.metadata) {
   font-size: 13px;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
-.video-meta,
 .video-version small {
   color: var(--muted);
   font: 11px var(--font-mono);
@@ -183,13 +159,9 @@
   display: grid;
   gap: 6px;
 }
-.video-version select {
+.video-version .custom-select {
   max-width: 100%;
   width: 100%;
-}
-.video-panel .primary-button {
-  background: var(--accent);
-  color: var(--app-bg);
 }
 .video-seasons {
   margin-top: 24px;
@@ -233,20 +205,8 @@
 .video-episode.is-selected {
   border-left: 3px solid var(--red);
 }
-.video-empty {
-  display: grid;
-  place-items: center;
-  gap: 12px;
-  padding: 48px 18px;
-  color: var(--muted);
-  text-align: center;
-}
 .video-error,
 .playback-error {
-  color: var(--red);
-  overflow-wrap: anywhere;
-  font-size: 12px;
-  padding: 8px 14px;
   margin: 0;
 }
 .video-collections header {
@@ -339,7 +299,7 @@
   min-width: 0;
   font-size: 12px;
 }
-.browser-options select {
+.browser-options .custom-select {
   max-width: 180px;
 }
 .browser-options > span {
@@ -415,7 +375,7 @@
   .browser-options label {
     flex: 1;
   }
-  .browser-options select {
+  .browser-options .custom-select {
     max-width: 120px;
   }
 }

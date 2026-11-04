@@ -1,0 +1,27 @@
+/* Workspace-specific HUD composition for Agent and Files. */
+
+:root {
+  --hud-void: var(--cyberos-hud-void);
+  --hud-deep: var(--cyberos-hud-deep);
+  --hud-panel: var(--cyberos-hud-panel);
+  --hud-panel-raised: var(--cyberos-hud-panel-raised);
+  --hud-panel-hover: var(--cyberos-hud-panel-hover);
+  --hud-text: var(--cyberos-hud-text);
+  --hud-muted: var(--cyberos-hud-muted);
+  --hud-dim: var(--cyberos-hud-dim);
+  --hud-red: var(--cyberos-hud-red-soft);
+  --hud-red-strong: var(--cyberos-hud-red);
+  --hud-cyan: var(--cyberos-hud-cyan-soft);
+  --hud-yellow: var(--cyberos-hud-yellow);
+  --hud-line: var(--cyberos-hud-line);
+  --hud-line-soft: var(--cyberos-hud-line-soft);
+  --hud-cyan-soft: var(--cyberos-hud-cyan-wash);
+  --hud-yellow-soft: var(--cyberos-hud-yellow-wash);
+  --hud-grid: var(--cyberos-hud-grid);
+}
+
+.chat-pane,
+.workspace-stage[data-panel="files"],
+.mobile-tabs {
+  color-scheme: dark;
+}

@@ -1,0 +1,77 @@
+@media (max-width: 620px) {
+
+  .storage-file-picker-backdrop {
+    padding: 10px;
+  }
+
+  .storage-file-picker {
+    height: calc(100dvh - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .storage-file-picker-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(180px, 1fr);
+    overflow-y: auto;
+  }
+
+  .storage-file-picker-pools {
+    max-height: 148px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .storage-file-picker-pool-list {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+  }
+
+  .storage-file-picker-pool {
+    flex: 0 0 min(230px, 72vw);
+  }
+
+  .storage-file-picker-header,
+  .storage-file-picker-toolbar,
+  .storage-file-picker-breadcrumbs,
+  .storage-file-picker-footer {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .storage-file-picker-file-meta {
+    display: none;
+  }
+
+  .storage-file-picker-row {
+    grid-template-columns: 30px minmax(0, 1fr) 20px;
+  }
+
+  .storage-file-picker-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .storage-file-picker-footer > span {
+    white-space: normal;
+  }
+
+  .storage-file-picker-footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+  }
+
+  .storage-file-picker-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .storage-file-picker-toolbar-actions {
+    justify-content: flex-end;
+  }
+
+  .storage-file-picker-create-folder {
+    flex: 1 1 auto;
+    grid-template-columns: minmax(0, 1fr) 30px 30px;
+  }
+}

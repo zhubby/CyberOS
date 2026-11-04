@@ -1,0 +1,82 @@
+.system-issue-list span {
+  white-space: normal;
+}
+
+.management-action-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.management-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.management-icon-action {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 0;
+}
+
+.management-icon-action.is-danger {
+  color: var(--danger-text);
+}
+
+.docker-container-name-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docker-container-name-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docker-container-name-trigger svg {
+  flex: 0 0 auto;
+  color: var(--accent-soft-text);
+  opacity: 0;
+  transform: translate(-2px, 2px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.docker-container-name-trigger:hover svg,
+.docker-container-name-trigger:focus-visible svg {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+.management-row-action {
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.management-lower-grid {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}

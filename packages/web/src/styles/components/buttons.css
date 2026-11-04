@@ -1,0 +1,122 @@
+/* Shared command geometry and states, including controls rendered in portals. */
+.primary-button,
+.secondary-button,
+.danger-button,
+.plain-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 86px;
+  min-height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.plain-button {
+  gap: 6px;
+  min-width: var(--control-compact-height);
+  min-height: var(--control-compact-height);
+  padding: 0 6px;
+  border-color: transparent;
+  background: transparent;
+  font: inherit;
+  text-transform: none;
+}
+
+.primary-button,
+.is-primary,
+.create-form-submit,
+.download-create-button {
+  position: relative;
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  background: var(--accent);
+  box-shadow: 3px 3px 0 rgb(255 0 60 / 55%);
+}
+
+.primary-button::after {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-top: 4px solid var(--accent-contrast);
+  border-right: 4px solid var(--accent-contrast);
+  pointer-events: none;
+  content: "";
+}
+
+.danger-button,
+.is-danger {
+  border-color: var(--red);
+  color: var(--danger-contrast);
+  background: var(--red);
+}
+
+.danger-button.is-quiet:not(:disabled):not([aria-busy="true"]) {
+  color: var(--danger-text);
+  background: transparent;
+  box-shadow: none;
+}
+
+.primary-button:hover:not(:disabled):not([aria-busy="true"]) {
+  color: var(--accent-contrast);
+  background: var(--accent-hover);
+}
+
+.secondary-button:hover:not(:disabled):not([aria-busy="true"]),
+.plain-button:hover:not(:disabled):not([aria-busy="true"]) {
+  border-color: var(--control-focus);
+  color: var(--control-focus);
+  background: var(--surface-hover);
+}
+
+.danger-button:hover:not(:disabled):not([aria-busy="true"]) {
+  background: var(--red-hover);
+}
+
+:is(.primary-button, .secondary-button, .danger-button):hover:not(:disabled):not([aria-busy="true"]) {
+  translate: -1px -1px;
+  box-shadow: var(--control-hover-shadow);
+}
+
+:is(.primary-button, .secondary-button, .danger-button):active:not(:disabled):not([aria-busy="true"]) {
+  translate: 1px 1px;
+  box-shadow: var(--control-active-shadow);
+}
+
+/* Opt into a compact command; a page ancestor must not change control size. */
+.button-compact {
+  min-width: var(--control-compact-height);
+  min-height: var(--control-compact-height);
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+button:disabled,
+button[aria-disabled="true"] {
+  border-color: var(--control-disabled-border);
+  color: var(--control-disabled-text);
+  background: var(--control-disabled-bg);
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+button[aria-busy="true"],
+button:disabled[aria-busy="true"] {
+  border-color: var(--accent);
+  color: var(--control-busy-text);
+  background: var(--control-busy-bg);
+  box-shadow: none;
+  opacity: 1;
+  cursor: progress;
+}

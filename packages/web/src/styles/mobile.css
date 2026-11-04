@@ -23,7 +23,7 @@
   .app-shell > .playback-shell { grid-row: 2; }
   .app-shell > .mobile-home-dock { grid-row: 3; grid-column: 1; }
   .app-shell :is(button, [role="button"], summary) { min-width: 44px; min-height: 44px; touch-action: manipulation; }
-  .app-shell :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select) { font-size: 16px; }
+  .app-shell :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, .custom-select-trigger) { font-size: 16px; }
   .app-shell > :is([data-modal-layer], .notification-drawer-backdrop, .browser-player-backdrop) { top: var(--mobile-viewport-top, 0px); bottom: auto; height: var(--mobile-viewport-height, 100dvh); }
   .app-shell > [data-modal-layer] > :is([role="dialog"], [role="alertdialog"]) { max-height: calc(var(--mobile-viewport-height, 100dvh) - 32px); }
   .app-shell :is(.split-handle, .mobile-tabs, .workspace-panel-rail) { display: none; }

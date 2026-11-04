@@ -1,3 +1,4 @@
+import { CustomSelect } from "../common/CustomSelect.js";
 import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -265,23 +266,31 @@ function RuleEditor({ draft, selectorText, metrics, policies, busy, builtin, err
       <form className="monitoring-alert-form" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
         <fieldset disabled={busy}>
           <label className="span-2"><span>{t("workspace.monitoring.alerts.fields.name")}</span><input required maxLength={120} value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} /></label>
-          <label><span>{t("workspace.monitoring.alerts.fields.metric")}</span><select value={draft.metric} onChange={(event) => {
-            const selected = metrics.find((item) => item.name === event.target.value);
-            onChange({ ...draft, metric: event.target.value, transform: selected?.kind === "counter" ? "rate" : "value", selector: {} });
-            onSelectorChange("{}");
-          }}>{metrics.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select></label>
+          <label>
+            <span>{t("workspace.monitoring.alerts.fields.metric")}</span>
+            <CustomSelect
+              value={draft.metric}
+              onChange={(selectedValue) => {
+                const selected = metrics.find((item) => item.name === selectedValue);
+                onChange({ ...draft, metric: selectedValue, transform: selected?.kind === "counter" ? "rate" : "value", selector: {} });
+                onSelectorChange("{}");
+              }}
+              ariaLabel={t("workspace.monitoring.alerts.fields.metric")}
+              options={metrics.map((item) => ({ value: item.name, label: item.name }))}
+            />
+          </label>
           <label><span>{t("workspace.monitoring.alerts.fields.selector")}</span><input className="is-mono" value={selectorText} onChange={(event) => onSelectorChange(event.target.value)} placeholder="{}" /></label>
-          <label><span>{t("workspace.monitoring.alerts.fields.transform")}</span><select value={draft.transform} disabled={metric?.kind === "counter"} onChange={(event) => onChange({ ...draft, transform: event.target.value as "value" | "rate" })}><option value="value">value</option><option value="rate">rate</option></select></label>
-          <label><span>{t("workspace.monitoring.alerts.fields.aggregation")}</span><select value={draft.aggregation} onChange={(event) => onChange({ ...draft, aggregation: event.target.value as MonitoringAlertRuleInput["aggregation"] })}>{["last", "avg", "min", "max"].map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label><span>{t("workspace.monitoring.alerts.fields.window")}</span><select value={draft.windowSeconds} onChange={(event) => onChange({ ...draft, windowSeconds: Number(event.target.value) as MonitoringAlertRuleInput["windowSeconds"] })}>{[60, 300, 900, 1800, 3600].map((value) => <option key={value} value={value}>{value / 60}m</option>)}</select></label>
-          <label><span>{t("workspace.monitoring.alerts.fields.comparator")}</span><select value={draft.comparator} onChange={(event) => onChange({ ...draft, comparator: event.target.value as MonitoringAlertRuleInput["comparator"] })}>{[">", ">=", "<", "<="].map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label><span>{t("workspace.monitoring.alerts.fields.transform")}</span><CustomSelect value={draft.transform} disabled={metric?.kind === "counter"} onChange={(selectedValue) => onChange({ ...draft, transform: selectedValue as "value" | "rate" })} ariaLabel={t("workspace.monitoring.alerts.fields.transform")} options={[{ value: "value", label: "value" }, { value: "rate", label: "rate" }]} /></label>
+          <label><span>{t("workspace.monitoring.alerts.fields.aggregation")}</span><CustomSelect value={draft.aggregation} onChange={(selectedValue) => onChange({ ...draft, aggregation: selectedValue as MonitoringAlertRuleInput["aggregation"] })} ariaLabel={t("workspace.monitoring.alerts.fields.aggregation")} options={["last", "avg", "min", "max"].map((item) => ({ value: item, label: item }))} /></label>
+          <label><span>{t("workspace.monitoring.alerts.fields.window")}</span><CustomSelect value={String(draft.windowSeconds)} onChange={(selectedValue) => onChange({ ...draft, windowSeconds: Number(selectedValue) as MonitoringAlertRuleInput["windowSeconds"] })} ariaLabel={t("workspace.monitoring.alerts.fields.window")} options={[60, 300, 900, 1800, 3600].map((value) => ({ value: String(value), label: `${value / 60}m` }))} /></label>
+          <label><span>{t("workspace.monitoring.alerts.fields.comparator")}</span><CustomSelect value={draft.comparator} onChange={(selectedValue) => onChange({ ...draft, comparator: selectedValue as MonitoringAlertRuleInput["comparator"] })} ariaLabel={t("workspace.monitoring.alerts.fields.comparator")} options={[">", ">=", "<", "<="].map((item) => ({ value: item, label: item }))} /></label>
           <NumberField label={String(t("workspace.monitoring.alerts.fields.triggerThreshold"))} value={draft.triggerThreshold} onChange={(value) => onChange({ ...draft, triggerThreshold: value })} />
           <NumberField label={String(t("workspace.monitoring.alerts.fields.recoveryThreshold"))} value={draft.recoveryThreshold} onChange={(value) => onChange({ ...draft, recoveryThreshold: value })} />
           <NumberField label={String(t("workspace.monitoring.alerts.fields.triggerDuration"))} value={draft.triggerDurationSeconds} min={0} max={86400} onChange={(value) => onChange({ ...draft, triggerDurationSeconds: value })} />
           <NumberField label={String(t("workspace.monitoring.alerts.fields.recoveryDuration"))} value={draft.recoveryDurationSeconds} min={0} max={86400} onChange={(value) => onChange({ ...draft, recoveryDurationSeconds: value })} />
-          <label><span>{t("workspace.monitoring.alerts.fields.severity")}</span><select value={draft.severity} onChange={(event) => onChange({ ...draft, severity: event.target.value as MonitoringAlertRuleInput["severity"] })}><option value="warning">{t("workspace.monitoring.alerts.severity.warning")}</option><option value="critical">{t("workspace.monitoring.alerts.severity.critical")}</option></select></label>
-          <label><span>{t("workspace.monitoring.alerts.fields.noData")}</span><select value={draft.noDataPolicy} onChange={(event) => onChange({ ...draft, noDataPolicy: event.target.value as MonitoringAlertRuleInput["noDataPolicy"] })}><option value="ignore">ignore</option><option value="firing">firing</option></select></label>
-          <label className="span-2"><span>{t("workspace.monitoring.alerts.fields.policy")}</span><select value={draft.escalationPolicyId ?? ""} onChange={(event) => onChange({ ...draft, escalationPolicyId: event.target.value || null })}><option value="">{t("workspace.monitoring.alerts.noPolicy")}</option>{policies.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
+          <label><span>{t("workspace.monitoring.alerts.fields.severity")}</span><CustomSelect value={draft.severity} onChange={(selectedValue) => onChange({ ...draft, severity: selectedValue as MonitoringAlertRuleInput["severity"] })} ariaLabel={t("workspace.monitoring.alerts.fields.severity")} options={[{ value: "warning", label: t("workspace.monitoring.alerts.severity.warning") }, { value: "critical", label: t("workspace.monitoring.alerts.severity.critical") }]} /></label>
+          <label><span>{t("workspace.monitoring.alerts.fields.noData")}</span><CustomSelect value={draft.noDataPolicy} onChange={(selectedValue) => onChange({ ...draft, noDataPolicy: selectedValue as MonitoringAlertRuleInput["noDataPolicy"] })} ariaLabel={t("workspace.monitoring.alerts.fields.noData")} options={[{ value: "ignore", label: "ignore" }, { value: "firing", label: "firing" }]} /></label>
+          <label className="span-2"><span>{t("workspace.monitoring.alerts.fields.policy")}</span><CustomSelect value={draft.escalationPolicyId ?? ""} onChange={(selectedValue) => onChange({ ...draft, escalationPolicyId: selectedValue || null })} ariaLabel={t("workspace.monitoring.alerts.fields.policy")} options={[{ value: "", label: t("workspace.monitoring.alerts.noPolicy") }, ...(policies.map((policy) => ({ value: policy.id, label: policy.name })))]} /></label>
           <Switch className="monitoring-alert-check span-2" checked={draft.enabled} onCheckedChange={(enabled) => onChange({ ...draft, enabled })} label={`${t("workspace.monitoring.alerts.enabled")}${builtin ? ` · ${t("workspace.monitoring.alerts.builtin")}` : ""}`} />
         </fieldset>
         <footer><button className="secondary-button" type="button" onClick={onCancel}><X size={15} />{t("common.actions.cancel")}</button><button className="primary-button" type="submit" disabled={busy} aria-busy={busy || undefined}>{busy ? <LoaderCircle className="is-spinning" size={15} /> : <Check size={15} />}{t("common.actions.save")}</button></footer>
@@ -489,7 +498,7 @@ function IncidentDetailDialog({
 }) {
   const { t } = useTranslation();
   const dialogRef = useModalDialog(onClose, busy);
-  const silenceScopeRef = useRef<HTMLSelectElement>(null);
+  const silenceScopeRef = useRef<HTMLButtonElement>(null);
   const silenceTriggerRef = useRef<HTMLButtonElement>(null);
   const previousShowSilence = useRef(false);
   const [scope, setScope] = useState<"series" | "rule">("series");
@@ -547,7 +556,7 @@ function IncidentDetailDialog({
           {showSilence && incident.ruleId ? <form className="monitoring-incident-silence-form" onSubmit={(event) => { event.preventDefault(); if (validSilence) onCreateSilence({ scope, startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(), reason: reason.trim() }); }}>
             <h3>{t("workspace.monitoring.alerts.incidents.createSilence")}</h3>
             <div className="monitoring-incident-silence-grid">
-              <label><span>{t("workspace.monitoring.alerts.incidents.silenceScope")}</span><select ref={silenceScopeRef} value={scope} onChange={(event) => setScope(event.target.value as "series" | "rule")}><option value="series">{t("workspace.monitoring.alerts.incidents.scopeSeries")}</option><option value="rule">{t("workspace.monitoring.alerts.incidents.scopeRule")}</option></select></label>
+              <label><span>{t("workspace.monitoring.alerts.incidents.silenceScope")}</span><CustomSelect triggerRef={silenceScopeRef} value={scope} onChange={(selectedValue) => setScope(selectedValue as "series" | "rule")} ariaLabel={t("workspace.monitoring.alerts.incidents.silenceScope")} options={[{ value: "series", label: t("workspace.monitoring.alerts.incidents.scopeSeries") }, { value: "rule", label: t("workspace.monitoring.alerts.incidents.scopeRule") }]} /></label>
               <label><span>{t("workspace.monitoring.alerts.incidents.silenceStarts")}</span><input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} /></label>
               <label><span>{t("workspace.monitoring.alerts.incidents.silenceEnds")}</span><input type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} /></label>
               <label className="span-2"><span>{t("workspace.monitoring.alerts.incidents.silenceReason")}</span><input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} /></label>

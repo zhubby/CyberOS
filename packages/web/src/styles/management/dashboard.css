@@ -1,0 +1,152 @@
+.management-body {
+  display: grid;
+  grid-template-columns: minmax(310px, 0.86fr) minmax(360px, 1.14fr);
+  grid-auto-rows: min-content;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.management-body > .management-dashboard-container {
+  grid-column: 1 / -1;
+}
+
+.management-dashboard-container,
+.management-dashboard-grid,
+.management-dashboard-widget,
+.management-widget-content {
+  min-width: 0;
+  min-height: 0;
+}
+
+.management-dashboard-container {
+  width: 100%;
+}
+
+.management-dashboard-grid {
+  min-height: 0;
+}
+
+.management-dashboard-grid > .react-grid-item {
+  min-width: 0;
+}
+
+.management-dashboard-grid > .react-grid-item.react-draggable-dragging,
+.management-dashboard-grid > .react-grid-item.resizing {
+  z-index: 8;
+}
+
+.management-dashboard-grid > .react-grid-item.react-grid-placeholder {
+  border: 1px dashed var(--accent-soft-text);
+  border-radius: 6px;
+  background: var(--accent-soft-bg);
+  opacity: 0.72;
+}
+
+.management-dashboard-widget {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+}
+
+.management-dashboard-widget[data-editing="true"] {
+  outline: 1px solid var(--accent-soft-text);
+  outline-offset: 2px;
+}
+
+.management-widget-content {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.management-widget-content:focus-visible {
+  outline-offset: -2px;
+}
+
+.management-widget-content > .management-command-panel,
+.management-widget-content > .management-section {
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: 100%;
+}
+
+.management-widget-content > .management-metric {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.management-widget-chrome {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 6;
+}
+
+.management-widget-chrome > span {
+  display: none;
+}
+
+.management-widget-drag-handle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--accent-soft-text);
+  border-radius: 0;
+  color: var(--accent-soft-text);
+  background: var(--modal-bg);
+  box-shadow: var(--shadow);
+  cursor: grab;
+  touch-action: none;
+}
+
+.management-widget-drag-handle:active {
+  cursor: grabbing;
+}
+
+.management-dashboard-grid.is-editing .react-resizable-handle-se {
+  right: 3px;
+  bottom: 3px;
+  z-index: 7;
+  width: 22px;
+  height: 22px;
+  cursor: se-resize;
+}
+
+.management-dashboard-grid.is-editing .react-resizable-handle-se::after {
+  right: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--accent-soft-text);
+  border-bottom: 2px solid var(--accent-soft-text);
+}
+
+.management-dashboard-static {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.management-dashboard-static .management-dashboard-widget,
+.management-dashboard-static .management-widget-content,
+.management-dashboard-static .management-widget-content > .management-command-panel,
+.management-dashboard-static .management-widget-content > .management-section,
+.management-dashboard-static .management-widget-content > .management-metric {
+  height: auto;
+  min-height: 0;
+}
+
+.management-dashboard-static .management-widget-content {
+  overflow: visible;
+}

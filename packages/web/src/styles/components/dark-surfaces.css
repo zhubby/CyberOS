@@ -1,0 +1,101 @@
+.settings-backdrop,
+.editor-backdrop,
+.management-modal-backdrop,
+.preview-backdrop,
+.notification-drawer-backdrop {
+  background: var(--modal-backdrop);
+}
+
+.editor-modal,
+.notification-drawer {
+  border-color: var(--cyberos-hud-line);
+  color: var(--text);
+  background: var(--dialog-bg);
+  box-shadow: 8px 8px 0 rgb(255 0 60 / 28%);
+}
+
+.settings-nav button {
+  color: var(--muted);
+}
+
+.settings-nav button:hover {
+  color: var(--cyber-cyan);
+  background: var(--cyberos-hud-cyan-wash);
+}
+
+.settings-nav button.is-active {
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: inset 5px 0 0 var(--cyber-red);
+}
+
+.settings-search input,
+.settings-field input,
+.settings-field textarea,
+.settings-field select {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--input-bg);
+}
+
+.management-dashboard-widget,
+.management-section,
+.management-metric,
+.management-command-panel,
+.download-task,
+.settings-section-card,
+.settings-policy-row,
+.monitoring-alert-table-wrap,
+.monitoring-incident-list article,
+.monitoring-incident-detail-section,
+.settings-alerts-section,
+.activity-popover,
+.notification-item,
+.workspace-empty-state,
+.preview-empty {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 rgb(255 0 60 / 22%);
+}
+
+.management-dashboard-widget:hover,
+.download-task:hover,
+.monitoring-incident-list article:hover,
+.notification-item:hover {
+  border-color: var(--cyber-cyan);
+  background: var(--surface-hover);
+}
+
+.management-command-panel,
+.management-section,
+.settings-section-card,
+.monitoring-incident-detail-section,
+.settings-alerts-section {
+  box-shadow: none;
+}
+
+.management-widget-content > .management-command-panel,
+.management-widget-content > .management-section,
+.management-widget-content > .management-metric {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.management-emblem {
+  border-radius: 0;
+  border-color: var(--cyber-red);
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+  box-shadow: 3px 3px 0 var(--cyber-red);
+}
+
+.management-fact-list div {
+  padding-inline: 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}

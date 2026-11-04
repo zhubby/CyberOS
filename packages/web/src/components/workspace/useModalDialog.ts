@@ -16,8 +16,8 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])"
 ].join(",");
 
-export function useModalDialog(onClose: () => void, closeDisabled = false, active = true): RefObject<HTMLElement | null> {
-  const dialogRef = useRef<HTMLElement>(null);
+export function useModalDialog<T extends HTMLElement = HTMLElement>(onClose: () => void, closeDisabled = false, active = true): RefObject<T | null> {
+  const dialogRef = useRef<T>(null);
   const onCloseRef = useRef(onClose);
   const closeDisabledRef = useRef(closeDisabled);
   const depth = useContext(ModalDepthContext);

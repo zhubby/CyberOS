@@ -1,0 +1,90 @@
+.settings-section-card.settings-git-skill-dialog,
+.settings-section-card.settings-mcp-dialog {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+  width: min(600px, 100%);
+  max-height: calc(100dvh - 36px);
+  overflow: hidden;
+  padding: 0;
+  background: var(--dialog-bg);
+}
+
+.settings-section-card.settings-git-skill-dialog > header,
+.settings-section-card.settings-mcp-dialog > header {
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settings-git-skill-dialog > header > div,
+.settings-mcp-dialog > header > div {
+  min-width: 0;
+}
+
+.settings-git-skill-dialog > header > button,
+.settings-mcp-dialog > header > button {
+  flex: 0 0 auto;
+}
+
+.settings-git-skill-dialog h3,
+.settings-mcp-dialog h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-git-skill-dialog h3 svg,
+.settings-mcp-dialog h3 svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.settings-git-skill-form,
+.settings-mcp-form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.settings-git-skill-body,
+.settings-mcp-body {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.settings-git-skill-form > footer,
+.settings-mcp-form > footer {
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--footer-bg);
+}
+
+.settings-project-skill {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
+@media (max-width: 720px) {
+  .settings-resource-row,
+  .settings-skill-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+
+  .settings-resource-row > .settings-resource-status {
+    grid-column: 2;
+  }
+
+  .settings-resource-row > .settings-resource-actions {
+    grid-column: 2;
+  }
+
+  .settings-resource-row > .hud-switch {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}

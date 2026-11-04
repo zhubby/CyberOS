@@ -1,0 +1,249 @@
+.management-section {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.management-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.management-section-header > div {
+  min-width: 0;
+}
+
+.management-section-header > .management-section-header-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.management-section-header h3 {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.management-section-header p {
+  margin-top: 4px;
+  font-size: 11.5px;
+}
+
+.management-table-wrap {
+  min-width: 0;
+  overflow: auto;
+}
+
+.management-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  color: var(--muted);
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.management-table-docker {
+  min-width: 720px;
+}
+
+.management-table-network {
+  min-width: 920px;
+}
+
+.management-table-storage {
+  min-width: 760px;
+}
+
+.management-table-virtualMachines {
+  min-width: 680px;
+}
+
+.management-table-docker th:nth-child(1),
+.management-table-docker td:nth-child(1) {
+  width: 19%;
+}
+
+.management-table-docker th:nth-child(2),
+.management-table-docker td:nth-child(2) {
+  width: 56px;
+  overflow: visible;
+  text-align: center;
+}
+
+.management-table-docker th:nth-child(3),
+.management-table-docker td:nth-child(3) {
+  width: 34%;
+}
+
+.management-table-docker th:nth-child(4),
+.management-table-docker td:nth-child(4) {
+  width: 9%;
+}
+
+.management-table-docker th:nth-child(5),
+.management-table-docker td:nth-child(5) {
+  width: 11%;
+}
+
+.management-table-docker th:nth-child(6),
+.management-table-docker td:nth-child(6) {
+  width: 14%;
+}
+
+.management-table-virtualMachines th:nth-child(1),
+.management-table-virtualMachines td:nth-child(1) {
+  width: 24%;
+}
+
+.management-table-virtualMachines th:nth-child(2),
+.management-table-virtualMachines td:nth-child(2) {
+  width: 16%;
+}
+
+.management-table-virtualMachines th:nth-child(3),
+.management-table-virtualMachines td:nth-child(3) {
+  width: 10%;
+}
+
+.management-table-virtualMachines th:nth-child(4),
+.management-table-virtualMachines td:nth-child(4) {
+  width: 16%;
+}
+
+.management-table-virtualMachines th:nth-child(5),
+.management-table-virtualMachines td:nth-child(5) {
+  width: 16%;
+}
+
+.management-table-virtualMachines th:nth-child(6),
+.management-table-virtualMachines td:nth-child(6) {
+  width: 18%;
+}
+
+.management-table-network th:nth-child(1),
+.management-table-network td:nth-child(1) {
+  width: 13%;
+}
+
+.management-table-network th:nth-child(2),
+.management-table-network td:nth-child(2),
+.management-table-network th:nth-child(3),
+.management-table-network td:nth-child(3) {
+  width: 10%;
+}
+
+.management-table-network th:nth-child(4),
+.management-table-network td:nth-child(4) {
+  width: 27%;
+}
+
+.management-table-network th:nth-child(5),
+.management-table-network td:nth-child(5) {
+  width: 16%;
+}
+
+.management-table-network th:nth-child(6),
+.management-table-network td:nth-child(6),
+.management-table-network th:nth-child(7),
+.management-table-network td:nth-child(7),
+.management-table-network th:nth-child(8),
+.management-table-network td:nth-child(8) {
+  width: 8%;
+}
+
+.management-table-storage th:nth-child(1),
+.management-table-storage td:nth-child(1) {
+  width: 18%;
+}
+
+.management-table-storage th:nth-child(2),
+.management-table-storage td:nth-child(2),
+.management-table-storage th:nth-child(3),
+.management-table-storage td:nth-child(3) {
+  width: 12%;
+}
+
+.management-table-storage th:nth-child(4),
+.management-table-storage td:nth-child(4) {
+  width: 24%;
+}
+
+.management-table-storage th:nth-child(5),
+.management-table-storage td:nth-child(5) {
+  width: 18%;
+}
+
+.management-table-storage th:nth-child(6),
+.management-table-storage td:nth-child(6) {
+  width: 8%;
+}
+
+.management-table th,
+.management-table td {
+  max-width: 240px;
+  padding: 10px;
+  border-bottom: 1px solid var(--table-border);
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-pool-name-button,
+.network-interface-name-button {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-pool-name-button:hover,
+.network-interface-name-button:hover {
+  color: var(--accent-soft-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.storage-pool-name-button:focus-visible,
+.network-interface-name-button:focus-visible {
+  border-radius: 0;
+  outline: 2px solid var(--control-focus);
+  outline-offset: 3px;
+}
+
+.management-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--muted-2);
+  background: var(--row-head-bg);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.management-table td:first-child {
+  color: var(--text);
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}

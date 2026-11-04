@@ -1,0 +1,111 @@
+/* Short reveal motion, never persistent flashing. */
+
+.chat-pane,
+.workspace-pane {
+  animation: cyber-pane-reveal 260ms var(--control-easing) both;
+}
+
+.workspace-panel-tab.is-active,
+.session-item.is-active,
+.settings-nav button.is-active {
+  animation: cyber-track-shift 160ms steps(2, end) both;
+}
+
+@keyframes cyber-pane-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cyber-track-shift {
+  from { box-shadow: inset 0 0 0 var(--cyber-red); }
+}
+
+@media (max-width: 860px) {
+  .settings-modal {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-rail {
+    grid-template-rows: auto auto minmax(0, auto);
+    padding: 12px 8px;
+    border-right: 0;
+    border-bottom: 2px solid var(--cyber-red);
+  }
+
+  .settings-nav button.is-active {
+    box-shadow: inset 0 -4px 0 var(--cyber-red);
+  }
+
+  .settings-content-header {
+    padding: 18px 20px 15px;
+  }
+
+  .settings-content-body {
+    padding: 16px 20px 22px;
+  }
+
+  .settings-section-card {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  .composer {
+    margin: 0 0 11px 10px;
+    padding: 9px;
+    box-shadow: 3px 3px 0 var(--cyber-red);
+  }
+
+  .message {
+    grid-template-columns: 28px minmax(0, 1fr);
+    padding-right: 6px;
+  }
+
+  .avatar {
+    width: 27px;
+    height: 27px;
+  }
+
+  .settings-content-header {
+    padding: 16px 14px 12px;
+  }
+
+  .settings-content-body {
+    padding: 14px;
+  }
+
+  .settings-section-card {
+    padding: 15px;
+    box-shadow: 3px 3px 0 var(--cyber-ink);
+  }
+
+  .management-body {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-pane,
+  .workspace-pane,
+  .workspace-panel-tab.is-active,
+  .session-item.is-active,
+  .settings-nav button.is-active,
+  .management-skeleton-block,
+  .skeleton-block {
+    animation: none;
+  }
+
+  .app-shell :where(button, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) {
+    transition: none;
+  }
+}
+
+/* Deep HUD global theme. Layout remains owned by the feature stylesheets. */

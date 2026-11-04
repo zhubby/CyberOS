@@ -232,25 +232,25 @@ export function DockerDaemonSettingsDialog({
         <footer className="docker-daemon-settings-footer">
           {phase === "confirm" ? (
             <>
-              <button type="button" onClick={() => setPhase("edit")} disabled={submitting}>
+              <button type="button" onClick={() => setPhase("edit")} disabled={submitting} className="secondary-button">
                 {t("common.actions.cancel")}
               </button>
-              <button type="button" className="is-danger" onClick={() => void submit(true)} disabled={submitting} aria-busy={submitting || undefined}>
+              <button type="button" className="danger-button" onClick={() => void submit(true)} disabled={submitting} aria-busy={submitting || undefined}>
                 {submitting ? <LoaderCircle aria-hidden="true" size={15} /> : <RotateCw aria-hidden="true" size={15} />}
                 <span>{t("workspace.management.docker.daemon.confirmRestart")}</span>
               </button>
             </>
           ) : (
             <>
-              <button type="button" onClick={onClose} disabled={submitting}>
+              <button type="button" onClick={onClose} disabled={submitting} className="secondary-button">
                 {t("common.actions.cancel")}
               </button>
               <div>
-                <button type="button" onClick={() => void submit(false)} disabled={!canSave} aria-busy={submitting || undefined}>
+                <button type="button" onClick={() => void submit(false)} disabled={!canSave} aria-busy={submitting || undefined} className="secondary-button">
                   {submitting ? <LoaderCircle aria-hidden="true" size={15} /> : <Save aria-hidden="true" size={15} />}
                   <span>{t("workspace.management.docker.daemon.save")}</span>
                 </button>
-                <button type="button" className="is-primary" onClick={() => setPhase("confirm")} disabled={!canRestart}>
+                <button type="button" className="primary-button" onClick={() => setPhase("confirm")} disabled={!canRestart}>
                   <RotateCw aria-hidden="true" size={15} />
                   <span>{t("workspace.management.docker.daemon.saveRestart")}</span>
                 </button>

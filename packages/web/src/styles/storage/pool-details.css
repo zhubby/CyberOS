@@ -1,0 +1,271 @@
+.storage-pool-details-body {
+  display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.storage-pool-details-overview {
+  display: grid;
+  grid-template-columns: 122px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--channel-bg);
+}
+
+.storage-pool-details-summary {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.storage-pool-details-summary strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-pool-details-summary p {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.storage-pool-details-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storage-pool-details-facts > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--subtle-bg);
+}
+
+.storage-pool-details-facts span {
+  color: var(--muted-2);
+  font-size: 9.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.storage-pool-details-facts strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-pool-members {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--channel-bg);
+}
+
+.storage-pool-members > header {
+  padding: 10px 12px;
+  background: var(--subtle-bg);
+}
+
+.storage-pool-members > header h3 {
+  margin-top: 3px;
+  font-size: 13px;
+}
+
+.storage-pool-members > header > strong {
+  color: var(--muted-2);
+  font-size: 12px;
+}
+
+.storage-pool-member-list {
+  display: grid;
+  gap: 1px;
+  padding: 6px;
+}
+
+.storage-pool-member {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 7px;
+  border-radius: 4px;
+  background: var(--subtle-bg);
+}
+
+.storage-pool-member svg {
+  color: var(--success-text);
+}
+
+.storage-pool-member span:first-of-type {
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-pool-member span:last-child {
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+.storage-pool-delete-panel {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--subtle-bg);
+}
+
+.storage-pool-delete-panel[data-state="danger"] {
+  border-color: var(--danger-border);
+  background: var(--danger-bg-soft);
+}
+
+.storage-pool-delete-copy {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+}
+
+.storage-pool-delete-copy > svg {
+  margin-top: 2px;
+  color: var(--danger-ui-text);
+}
+
+.storage-pool-delete-copy h3 {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.storage-pool-delete-copy p,
+.storage-pool-delete-disabled {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.storage-pool-delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.storage-pool-delete-actions > button:not(.danger-button),
+.storage-pool-delete-confirmation label input {
+  min-height: 34px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.storage-pool-delete-actions > button:not(.danger-button) {
+  padding: 0 11px;
+}
+
+.storage-pool-delete-confirmation {
+  display: grid;
+  gap: 9px;
+}
+
+.storage-pool-delete-confirmation label {
+  display: grid;
+  gap: 6px;
+}
+
+.storage-pool-delete-confirmation label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.storage-pool-delete-confirmation label input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 9px;
+}
+
+.storage-pool-delete-confirmation label input:focus {
+  border-color: var(--accent);
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--focus-ring-inset);
+}
+
+.storage-pool-form {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.storage-pool-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(140px, 0.8fr));
+  gap: 11px;
+}
+
+.storage-pool-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.storage-pool-fields label > span,
+.storage-disk-selection h3 {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.storage-pool-fields input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+}
+
+.storage-pool-fields .custom-select {
+  width: 100%;
+  min-width: 0;
+}

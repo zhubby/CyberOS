@@ -1,0 +1,218 @@
+.storage-disk-selection {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 14px;
+  background: var(--channel-bg);
+}
+
+.storage-disk-selection h3 {
+  margin: 0 0 5px;
+  line-height: 1.3;
+}
+
+.storage-disk-selection > p {
+  margin: 0 0 11px;
+  color: var(--muted-2);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.storage-disk-options {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.storage-disk-option {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--subtle-bg);
+}
+
+.storage-disk-option:has(input:checked) {
+  border-color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.storage-disk-option[data-state="ready"] em {
+  color: var(--success-text);
+}
+
+.storage-disk-option[data-state="mounted"] em,
+.storage-disk-option[data-state="formatted"] em,
+.storage-disk-option[data-state="array"] em {
+  color: var(--muted-2);
+}
+
+.storage-disk-option input {
+  width: 15px;
+  height: 15px;
+}
+
+.storage-disk-option > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.storage-disk-option strong,
+.storage-disk-option small,
+.storage-disk-option em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-disk-option strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.storage-disk-option small,
+.storage-disk-option em {
+  color: var(--muted-2);
+  font-size: 10.5px;
+  font-style: normal;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.storage-pool-risk-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--warning-text);
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.storage-pool-risk-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.storage-pool-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--subtle-bg);
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.storage-pool-confirmation input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 1px 0 0;
+}
+
+.storage-pool-confirmation span {
+  min-width: 0;
+}
+
+.storage-pool-progress {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px 12px;
+  border-left: 2px solid var(--accent-soft-text);
+  border-radius: 3px;
+  background: var(--accent-soft-bg);
+}
+
+.storage-pool-progress-summary {
+  display: grid;
+  grid-template-columns: 17px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  min-width: 0;
+}
+
+.storage-pool-progress-summary > svg {
+  margin-top: 1px;
+  color: var(--accent-soft-text);
+}
+
+.storage-pool-progress-summary > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.storage-pool-progress-summary strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.storage-pool-progress-summary span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.storage-pool-progress-track {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--surface);
+}
+
+.storage-pool-progress-track > span {
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: storage-pool-progress 1.4s ease-in-out infinite;
+}
+
+.storage-pool-spinner {
+  transform-origin: center;
+  animation: storage-pool-spin 0.9s linear infinite;
+}
+
+@keyframes storage-pool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes storage-pool-progress {
+  from {
+    transform: translateX(-85%);
+  }
+
+  to {
+    transform: translateX(245%);
+  }
+}
+
+.storage-pool-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}

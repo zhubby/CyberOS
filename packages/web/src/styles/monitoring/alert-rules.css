@@ -1,0 +1,86 @@
+.monitoring-alert-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.monitoring-alert-form label,
+.settings-alerts-section label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.monitoring-alert-form label:not(.hud-switch) > span,
+.settings-alerts-section label:not(.hud-switch) > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+  font-weight: 650;
+}
+
+.monitoring-alert-form input:not(.hud-switch-input),
+.settings-alerts-section input:not(.hud-switch-input) {
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--input-bg, var(--surface));
+  color: var(--text);
+  font: inherit;
+}
+
+.monitoring-alert-form .custom-select,
+.settings-alerts-section .custom-select {
+  min-width: 0;
+}
+
+.monitoring-alert-form .span-2 {
+  grid-column: 1 / -1;
+}
+
+.monitoring-alert-check {
+  display: flex !important;
+  grid-template-columns: none;
+  align-items: center;
+}
+
+.settings-alerts-check-list input {
+  width: 15px;
+  height: 15px;
+}
+
+.monitoring-alert-form footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.monitoring-alert-filters {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.monitoring-alert-filters button {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+}
+
+.monitoring-alert-filters button.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+}

@@ -2,10 +2,11 @@ import { useTranslation } from "react-i18next";
 import { CustomSelect } from "../common/CustomSelect.js";
 import { usePlayback } from "./PlaybackProvider.js";
 
-export function PlaybackTargetSelect({ onChange }: { onChange?: () => void }) {
+export function PlaybackTargetSelect({ onChange, compact = false }: { onChange?: () => void; compact?: boolean }) {
   const p = usePlayback();
   const { t } = useTranslation();
   return <CustomSelect<"browser" | "nas">
+    className={compact ? "control-compact" : ""}
     value={p.target === "browser" && p.browser ? "browser" : "nas"}
     ariaLabel={t("playback.controlTarget")}
     options={[

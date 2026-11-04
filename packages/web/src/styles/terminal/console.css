@@ -1,0 +1,23 @@
+.management-log-output {
+  min-height: 340px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  color: var(--text);
+  background: var(--code-bg);
+  font-family: var(--code-font-family);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.management-console-modal {
+  width: min(920px, 100%);
+}
+
+.management-terminal {
+  min-height: 440px;
+  padding: 8px;
+  overflow: hidden;
+  background: var(--code-bg);
+}

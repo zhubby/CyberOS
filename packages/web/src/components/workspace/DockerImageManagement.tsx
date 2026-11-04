@@ -1,3 +1,4 @@
+import { CustomSelect } from "../common/CustomSelect.js";
 import { ModalPortal } from "../common/ModalPortal.js";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
@@ -182,12 +183,12 @@ export function DockerImageManagement({
                 setPullError(null);
                 setPullOpen(true);
               }}
-              disabled={!engineReady}
+              disabled={!engineReady} className="secondary-button button-compact"
             >
               <Download aria-hidden="true" size={14} />
               <span>{t("workspace.management.docker.images.pull")}</span>
             </button>
-            <button type="button" onClick={() => setRegistryOpen(true)}>
+            <button type="button" onClick={() => setRegistryOpen(true)} className="secondary-button button-compact">
               <KeyRound aria-hidden="true" size={14} />
               <span>{t("workspace.management.docker.images.registries")}</span>
             </button>
@@ -349,9 +350,13 @@ export function DockerImageDetailsDialog({
             {targets.length > 1 ? (
               <label>
                 <span>{t("workspace.management.docker.images.removeReference")}</span>
-                <select value={deleteReference} onChange={(event) => onDeleteReference(event.target.value)} disabled={deleting}>
-                  {targets.map((target) => <option key={target} value={target}>{target}</option>)}
-                </select>
+                <CustomSelect
+                  value={deleteReference}
+                  onChange={(selectedValue) => onDeleteReference(selectedValue)}
+                  disabled={deleting}
+                  ariaLabel={t("workspace.management.docker.images.removeReference")}
+                  options={targets.map((target) => ({ value: target, label: target }))}
+                />
               </label>
             ) : (
               <code>{deleteReference}</code>
@@ -379,16 +384,16 @@ export function DockerImageDetailsDialog({
         <footer className="docker-image-dialog-footer">
           {deleteConfirming ? (
             <>
-              <button type="button" onClick={onCancelDelete} disabled={deleting}>{t("common.actions.cancel")}</button>
-              <button type="button" className="is-danger" onClick={onConfirmDelete} disabled={!engineReady || removalBlocked || deleting} aria-busy={deleting || undefined}>
+              <button type="button" onClick={onCancelDelete} disabled={deleting} className="secondary-button">{t("common.actions.cancel")}</button>
+              <button type="button" className="danger-button" onClick={onConfirmDelete} disabled={!engineReady || removalBlocked || deleting} aria-busy={deleting || undefined}>
                 {deleting ? <LoaderCircle aria-hidden="true" size={15} /> : <Trash2 aria-hidden="true" size={15} />}
                 <span>{t("workspace.management.docker.images.confirmRemove")}</span>
               </button>
             </>
           ) : (
             <>
-              <button type="button" onClick={onClose}>{t("common.actions.close")}</button>
-              <button type="button" className="is-danger" onClick={onBeginDelete} disabled={!engineReady || removalBlocked}>
+              <button type="button" onClick={onClose} className="secondary-button">{t("common.actions.close")}</button>
+              <button type="button" className="danger-button" onClick={onBeginDelete} disabled={!engineReady || removalBlocked}>
                 <Trash2 aria-hidden="true" size={15} />
                 <span>{t("workspace.management.docker.images.remove")}</span>
               </button>
@@ -459,8 +464,8 @@ function DockerImagePullDialog({
           {error ? <p className="docker-image-error">{error}</p> : null}
         </div>
         <footer className="docker-image-dialog-footer">
-          <button type="button" onClick={onClose} disabled={submitting}>{t("common.actions.cancel")}</button>
-          <button type="submit" className="is-primary" disabled={!engineReady || !valid || submitting} aria-busy={submitting || undefined}>
+          <button type="button" onClick={onClose} disabled={submitting} className="secondary-button">{t("common.actions.cancel")}</button>
+          <button type="submit" className="primary-button" disabled={!engineReady || !valid || submitting} aria-busy={submitting || undefined}>
             {submitting ? <LoaderCircle aria-hidden="true" size={15} /> : <Download aria-hidden="true" size={15} />}
             <span>{submitting ? t("workspace.management.docker.images.pulling") : t("workspace.management.docker.images.pull")}</span>
           </button>
@@ -604,7 +609,7 @@ function DockerRegistryDialog({
           <div className="docker-registry-list-body">
             <div className="docker-registry-list-heading">
               <p>{t("workspace.management.docker.images.registryDescription")}</p>
-              <button type="button" onClick={startCreate} disabled={loading}><Plus aria-hidden="true" size={14} /><span>{t("workspace.management.docker.images.addRegistry")}</span></button>
+              <button type="button" onClick={startCreate} disabled={loading} className="secondary-button button-compact"><Plus aria-hidden="true" size={14} /><span>{t("workspace.management.docker.images.addRegistry")}</span></button>
             </div>
             {loadError ? <p className="docker-image-error">{loadError}</p> : null}
             {loading ? (
@@ -632,18 +637,18 @@ function DockerRegistryDialog({
         <footer className="docker-image-dialog-footer">
           {deleteCandidate ? (
             <>
-              <button type="button" onClick={() => setDeleteCandidate(null)} disabled={submitting}>{t("common.actions.cancel")}</button>
-              <button type="button" className="is-danger" onClick={() => void confirmRegistryDelete()} disabled={submitting} aria-busy={submitting || undefined}>{submitting ? <LoaderCircle aria-hidden="true" size={15} /> : <Trash2 aria-hidden="true" size={15} />}<span>{t("workspace.management.docker.images.deleteRegistry")}</span></button>
+              <button type="button" onClick={() => setDeleteCandidate(null)} disabled={submitting} className="secondary-button">{t("common.actions.cancel")}</button>
+              <button type="button" className="danger-button" onClick={() => void confirmRegistryDelete()} disabled={submitting} aria-busy={submitting || undefined}>{submitting ? <LoaderCircle aria-hidden="true" size={15} /> : <Trash2 aria-hidden="true" size={15} />}<span>{t("workspace.management.docker.images.deleteRegistry")}</span></button>
             </>
           ) : editing ? (
             <>
-              <button type="button" onClick={() => setEditing(null)} disabled={submitting}>{t("common.actions.cancel")}</button>
-              <button type="submit" form="docker-registry-form" className="is-primary" disabled={!formValid || submitting} aria-busy={submitting || undefined}>{submitting ? <LoaderCircle aria-hidden="true" size={15} /> : <Check aria-hidden="true" size={15} />}<span>{t("workspace.management.docker.images.saveRegistry")}</span></button>
+              <button type="button" onClick={() => setEditing(null)} disabled={submitting} className="secondary-button">{t("common.actions.cancel")}</button>
+              <button type="submit" form="docker-registry-form" className="primary-button" disabled={!formValid || submitting} aria-busy={submitting || undefined}>{submitting ? <LoaderCircle aria-hidden="true" size={15} /> : <Check aria-hidden="true" size={15} />}<span>{t("workspace.management.docker.images.saveRegistry")}</span></button>
             </>
           ) : (
             <>
-              <button type="button" onClick={() => void onReload()} disabled={loading}>{t("common.actions.refresh")}</button>
-              <button type="button" className="is-primary" onClick={onClose}>{t("common.actions.close")}</button>
+              <button type="button" onClick={() => void onReload()} disabled={loading} className="secondary-button">{t("common.actions.refresh")}</button>
+              <button type="button" className="primary-button" onClick={onClose}>{t("common.actions.close")}</button>
             </>
           )}
         </footer>

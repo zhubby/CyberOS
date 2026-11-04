@@ -1,0 +1,227 @@
+.settings-backdrop {
+  padding: 20px;
+}
+
+.settings-modal {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  width: min(1120px, calc(100vw - 40px));
+  height: min(860px, calc(100vh - 40px));
+  overflow: hidden;
+}
+
+.settings-rail {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+  padding: 16px 10px;
+  background: var(--server-bg);
+  border-right: 1px solid rgb(0 0 0 / 34%);
+}
+
+.settings-rail-brand {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  min-width: 0;
+  padding: 0 8px 14px;
+}
+
+.settings-brand-logo {
+  display: block;
+  width: 36px;
+  height: 36px;
+  filter: drop-shadow(0 7px 14px rgb(88 101 242 / 18%));
+}
+
+.settings-search {
+  position: relative;
+  display: block;
+  margin: 0 6px 16px;
+}
+
+.settings-search svg {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  color: var(--muted-2);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.settings-search input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid rgb(255 255 255 / 5%);
+  border-radius: 5px;
+  padding: 0 10px 0 32px;
+  color: var(--text);
+  background: #111219;
+}
+
+.settings-search input::placeholder {
+  color: var(--muted-2);
+}
+
+.settings-nav {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 2px;
+}
+
+.settings-nav section {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.settings-nav h3 {
+  margin: 0;
+  padding: 8px 8px 5px;
+  color: var(--muted-2);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.settings-nav button {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 5px 8px;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-nav button:hover,
+.settings-nav button.is-active {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.settings-nav button.is-active {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.settings-nav button svg {
+  color: inherit;
+}
+
+.settings-nav button strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-nav button strong {
+  font-size: 12.5px;
+}
+
+.settings-empty-search,
+.settings-rail-footer {
+  color: var(--muted-2);
+  font-size: 11.5px;
+}
+
+.settings-empty-search {
+  margin: 10px 8px;
+}
+
+.settings-rail-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  margin: 8px 6px 0;
+  padding: 0 8px;
+  border-top: 1px solid rgb(255 255 255 / 6%);
+}
+
+.settings-rail-footer svg {
+  color: var(--green);
+}
+
+.settings-content {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background: #242631;
+}
+
+.settings-content-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: start;
+  gap: 18px;
+  padding: 24px 30px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settings-content-header h2 {
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.15;
+}
+
+.settings-content-header p {
+  max-width: 720px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-area-list em {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 11.5px;
+  font-style: normal;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.settings-area-list em[data-state="ready"] {
+  color: #78d89d;
+  background: rgb(35 165 89 / 14%);
+}
+
+.settings-area-list em[data-state="missing"] {
+  color: #ffd37a;
+  background: rgb(240 178 50 / 15%);
+}
+
+.settings-area-list em[data-state="loading"] {
+  color: #aeb4c0;
+  background: rgb(255 255 255 / 7%);
+}
+
+.settings-content-header button {
+  width: 38px;
+  height: 38px;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-content-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 30px 24px;
+}

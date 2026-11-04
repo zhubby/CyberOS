@@ -1,0 +1,185 @@
+@container workspace-stage (max-width: 760px) {
+
+  .management-body,
+  .management-lower-grid,
+  .docker-runtime-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .docker-pressure-section,
+  .docker-compose-section {
+    grid-column: auto;
+  }
+}@media (max-width: 620px) {
+
+  .docker-create-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .create-form-dialog.docker-create-dialog {
+    height: min(840px, calc(100dvh - 20px));
+    max-height: calc(100dvh - 20px);
+  }
+
+  .create-form-dialog .docker-create-stepper {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 5px;
+  }
+
+  .docker-create-column-head {
+    display: none;
+  }
+
+  .docker-create-map .docker-create-row,
+  .docker-create-port-row,
+  .docker-create-ipam-row,
+  .docker-create-map-grid,
+  .docker-create-port-grid,
+  .docker-create-ipam-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .docker-create-port-row > input:first-child,
+.docker-create-ipam-row > input:first-child {
+    grid-column: span 2;
+  }
+
+  .docker-create-port-row > .custom-select:first-child {
+    grid-column: span 2;
+  }
+
+  .docker-create-port-row > input:nth-child(3),
+  .docker-create-port-row > input:nth-child(4),
+  .docker-create-ipam-row > input:nth-child(3),
+  .docker-create-ipam-row > input:nth-child(4) {
+    grid-column: span 2;
+  }
+
+  .docker-create-rows > .docker-create-row:not(.docker-create-port-row) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .docker-create-rows > .docker-create-row:not(.docker-create-port-row) > input {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .docker-create-rows > .docker-create-row:not(.docker-create-port-row) > .custom-select {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .docker-create-rows > .docker-create-row:not(.docker-create-port-row) > .docker-create-inline-check {
+    flex: 0 0 auto;
+  }
+
+  .docker-create-rows > .docker-create-row:not(.docker-create-port-row) > .docker-create-remove {
+    flex: 0 0 28px;
+  }
+
+  .docker-create-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .docker-create-port-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .docker-create-row input:first-child {
+    grid-column: span 2;
+  }
+
+  .docker-create-row .custom-select:first-child {
+    grid-column: span 2;
+  }
+
+  .docker-create-ipam-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .docker-create-mount-row,
+  .docker-create-mount-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .docker-create-mount-row > .docker-create-mount-source,
+  .docker-create-mount-row > .docker-create-mount-target,
+  .docker-create-mount-row > .docker-create-mount-options {
+    grid-column: span 2;
+  }
+
+  .docker-create-row-remove {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .docker-create-mount-source {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .docker-create-mount-source > input:first-child {
+    grid-column: auto;
+  }
+
+  .docker-create-mount-source > .custom-select:first-child {
+    grid-column: auto;
+  }
+
+  .docker-create-mount-table .docker-create-column-head {
+    display: none;
+  }
+
+  .docker-create-ipam-row input:nth-child(3),
+  .docker-create-ipam-row input:nth-child(4) {
+    grid-column: span 2;
+  }
+}@media (max-width: 560px) {
+
+  .docker-daemon-settings-backdrop {
+    align-items: stretch;
+    padding: 8px;
+  }
+
+  .docker-daemon-settings-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+  }
+
+  .docker-daemon-settings-body,
+  .docker-daemon-confirmation {
+    padding: 13px;
+  }
+
+  .docker-daemon-settings-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .docker-daemon-editor-field textarea {
+    min-height: 280px;
+  }
+
+  .docker-daemon-settings-footer,
+  .docker-daemon-settings-footer > div {
+    align-items: stretch;
+  }
+
+  .docker-daemon-settings-footer {
+    flex-direction: column-reverse;
+  }
+
+  .docker-daemon-settings-footer > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .docker-daemon-settings-footer > button,
+  .docker-daemon-settings-footer > div > button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .docker-daemon-confirmation dl > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

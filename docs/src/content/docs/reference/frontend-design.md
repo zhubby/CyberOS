@@ -7,6 +7,15 @@ audience: [developer]
 sourceOfTruth:
   - packages/shared/src/hud-tokens.css
   - packages/web/src/styles/base.css
+  - packages/web/src/styles/foundation/tokens.css
+  - packages/web/src/styles/components/buttons.css
+  - packages/web/src/styles/components/forms.css
+  - packages/web/src/styles/components/tabs.css
+  - packages/web/src/styles/components/status.css
+  - packages/web/src/styles/components/feedback.css
+  - packages/web/src/styles/components/create-form.css
+  - packages/web/src/styles/architecture.test.ts
+  - scripts/test-web-styles.mjs
   - packages/web/src/styles/switch.css
   - packages/web/src/styles/brand.css
   - packages/web/src/styles/layout.css
@@ -185,6 +194,19 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 - **规则不依赖挂载位置**：弹窗、嵌套弹窗、全屏层和挂载到 `document.body` 的 Portal 都必须生效。Web 的 `brand.css`、TV 的 `tv.css` 与文档站的 `custom.css` 均使用全局 `border-radius: 0 !important` 约束按钮、语义按钮及其伪元素，不能依赖局部工作区祖先；基础主、次、危险按钮也直接定义为 `0`。
 - 新增或修改按钮时禁止通过局部 CSS、内联样式、单角半径、交互状态或 `!important` 覆盖直角约束。验收检查浏览器计算样式中的四个角均为 `0px`，并覆盖主按钮、次按钮、危险按钮、图标按钮及 Portal 场景。
 
+### 样式组织与复用
+
+- `styles.css`、`workspace.css`、`settings.css`、`brand.css`、`hud-workspaces.css`、`responsive.css`、`chat.css`、`photos.css`、`monitoring-alerts.css` 与 `tv/tv.css` 是聚合入口，只维护导入顺序。基础映射在 `styles/foundation/`，共享控件在 `styles/components/`，业务规则归入文件、下载、网络、存储、Docker、VM、终端、聊天、照片等所属目录。响应式规则跟随所属模块；全局骨架响应规则位于 `foundation/responsive.css`。
+- 业务样式以 200–600 行为维护目标，单文件不得超过 800 行。不得为行数目标拆出编号片段；文件名表达职责。文件拆分首先保持声明和导入顺序，再通过计算样式及交互回归确认有意的统一调整。
+- 基础颜色以共享 `hud-tokens.css` 为准，Web/TV 共用 `foundation/tokens.css` 的完整组件映射。新增变量必须有定义或明确回退；仅动态数据值由组件设置。禁止使用未定义的 `--border`、`--panel`、`--focus-ring` 等局部别名。
+- 主、次、危险命令分别复用 `primary-button`、`secondary-button`、`danger-button`；轻量行内操作复用 `plain-button`。默认命令高 `34px`，显式 `button-compact` 为 `32px`，不得通过 `.某页面 button` 改变公共按钮尺寸、禁用透明度或忙碌颜色。移动触控至少 `44px`，TV 默认命令为 `48px`。
+- 所有 Web/TV 下拉框统一使用 `CustomSelect`，ESLint 检查全部 Web TSX。字段默认高 `40px`；紧凑字段通过 `className="control-compact"` 显式选择 `34px`，移动触控至少 `44px`；TV 字段和选项保持 `48px`。菜单统一深色抬升表面、黄色选中文字和红色状态轨，不能按页面重设配色。菜单挂到当前模态或应用浮层，以视口定位并随滚动更新，避免正文裁切；Escape 只关闭当前层。
+- 必填下拉使用 `required`，校验失败后聚焦可见触发器并展示关联错误；`triggerRef` 用于恢复焦点，`ariaBusy` 保留异步状态。业务负责字符串与数值之间的转换及其校验，不能通过伪造原生事件适配。
+- 音乐导航复用 `view-tabs` 外观，保留 `aria-current="page"` 的导航语义；页签使用 `aria-selected`。两者使用同一选中态。
+- 创建流程复用 `create-form-*`，Docker 不得引用 VM 的样式类。字段复用公共表单表面和焦点；弹窗复用 `ModalPortal`、`useModalDialog` 与 `modal.css`，业务只调整尺寸、正文布局和信息排列。状态标记与反馈集中在 `components/status.css`、`components/feedback.css`；技术元数据复用 `metadata`。
+
+拆分归属、整改项和验证入口见[前端样式维护清单](/docs/reference/frontend-styles/)。
+
 ## 6. 动效
 
 动效模拟短促设备状态切换，不模拟故障闪烁。
@@ -266,7 +288,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 - 窄屏 Web 与 TV 的底栏在独立底部网格行分配空间，不能覆盖主屏 Dock、内容或输入区；最底部可见行承接安全区。TV 使用较大的遥控操作面。收起后改为紧凑恢复入口，TV 高约 `61px`。“收起播放器”使用向下箭头，保留标签页内的展开偏好及静态状态标记；收起后聚焦恢复入口，展开后聚焦播放/暂停按钮，浏览器全屏时隐藏。TV 与 Web 复用同一播放控制内容与目标路由。
 - 播放控制的设备选择始终明确控制对象；NAS 播电影时保留音乐队列入口。不同设备的操作不能隐式作用到另一端。
 - 桌面播放浮窗常驻“音量图标、提交式滑杆、百分比”一行，底部并列输出摘要、队列及适用的带标签停止按钮。输出摘要取服务端实际输出，不以待提交选择代替；未知或不可用时显示明确状态。NAS 输出入口在卡片内展开设备选择、明确的切换操作及适用的音轨、字幕、延迟、静音设置，不重复音量；每次打开浮窗或切换控制对象/会话时默认收起。选择设备只更新草稿，点击切换后才提交；重新展开从当前配置初始化草稿，失败时保留实际输出摘要和错误。浏览器播放显示本地输出说明。展开触发布局重新测量，不能超出视口。窄屏 Web 与 TV 底栏的音频输出入口使用带本地化 `aria-label` 和 `data-tooltip` 的音量图标按钮，输出浮窗向上展开并限制在视口内；Escape 关闭并恢复图标焦点。
-- 播放浮窗与音频输出浮窗内的设备、音轨、字幕等下拉统一使用共享 `CustomSelect`，禁止原生 `<select>`，不得仅用 CSS 隐藏原生外观；共享输出设备选择器也遵循此约束。展开选项在浮窗内保持可见，短视口允许内部滚动；Escape 先关闭下拉，再关闭浮窗并恢复入口焦点。`eslint.config.js` 对共享播放控制、播放菜单及共享输出设备选择器执行此限制。
+- 播放浮窗与音频输出浮窗内的设备、音轨、字幕等下拉统一使用共享 `CustomSelect`，禁止原生 `<select>`，不得仅用 CSS 隐藏原生外观；共享输出设备选择器也遵循此约束。展开选项在视口内保持可见，短视口允许内部滚动；Escape 先关闭下拉，再关闭浮窗并恢复入口焦点。`eslint.config.js` 对全部 Web TSX 执行此限制。
 - 播放、音量和进度控件复用提交式滑杆，拖动结束后提交；输出切换必须明确执行。遥控焦点使用共享青色焦点环，TV 增大操作面和文字密度。
 - TV 原生全屏视频的播放控制绘制在播放器画面内，采用同一 HUD 调色板、硬边结构与青色遥控焦点，水平居中并位于画面偏下位置；不能依赖被原生播放窗口遮住的 Web 播放条。浮层提供进度、前后跳转、暂停/继续、音轨、字幕与返回媒体库；音轨和字幕使用方向键选择真实轨道，字幕包含关闭项。播放中闲置 5 秒隐藏，暂停或轨道菜单打开时保持显示；确定或方向键可唤回，返回先关闭轨道菜单，再退出视频并保留浏览上下文；Home 发送独立导航意图后退出视频，页面收到新意图回到影视首页，忽略历史或重复意图。这里的全屏临时浮层与占据应用骨架独立行的公共播放条分别服务播放和浏览场景。
 - TV 浏览层统一处理遥控返回别名（Escape、BrowserBack、GoBack、461）与 Home / BrowserHome。返回每次只关闭最上层菜单或弹窗，再从详情退回原海报、合集内容退回合集、分类退回首页；忙碌确认不可关闭。Home 关闭可关闭层并直达影视首页；正在播放的 NAS 视频停止，音乐队列和播放不受浏览导航影响。只有确定键激活焦点按钮，媒体键只分发到当前播放目标及其会话。
@@ -280,7 +302,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 - 设置在 `1040px` 及以下使用全屏分类列表及详情页；返回先从详情退回分类。桌面继续使用居中设置弹窗。确认、编辑等真正模态弹窗始终通过 `ModalPortal` 覆盖整个视口居中，不能跟随全屏设置页改为局部定位。
 - 设置中的独立区块统一复用 `settings-page-grid` 的单列整行布局，媒体元数据、媒体库状态等按顺序上下排列；不得用页面局部样式将独立区块改成左右等分。
 - 设置概览的所有区块共用标题栏：左侧固定 `24px` 图标位承载 `18px` Lucide 图标，与 `24px` 行高的标题居中对齐；图标位和文字间距为 `10px`，说明文字在标题下方同列起笔。标题栏底部使用 `12px` 间距和细分隔线，系统概况也必须提供图标；中英文和窄屏沿用同一结构，长说明自然换行，不改变标题的水平起点。
-- **设置下拉框禁止使用原生样式**：所有设置页面、内部弹窗及设置复用的共享控件必须使用 `CustomSelect`，触发器和展开选项都遵循共享 HUD 样式。禁止使用原生 `<select>`；仅添加 CSS 或 `appearance: none` 不符合要求。保留键盘导航、选中与禁用状态、长文本省略、Escape 关闭和焦点恢复，展开菜单不得被滚动容器裁切。`eslint.config.js` 对设置组件及共享 Wi-Fi 设置组件执行此限制；新增设置共享组件时同步纳入检查范围。
+- **设置下拉框禁止使用原生样式**：所有设置页面、内部弹窗及设置复用的共享控件必须使用 `CustomSelect`，触发器和展开选项都遵循共享 HUD 样式。禁止使用原生 `<select>`；仅添加 CSS 或 `appearance: none` 不符合要求。保留键盘导航、选中与禁用状态、长文本省略、Escape 关闭和焦点恢复，展开菜单不得被滚动容器裁切。`eslint.config.js` 对全部 Web TSX 执行此限制。
 - 密钥输入框的清除操作放在框内右侧，待清除状态使用文字占位提示并提供撤销；提交设置后才清除已保存的凭据，不另占一行 checkbox。
 - **悬浮提示禁止原生样式**：Web 与 TV 中按钮、图标、状态、被截断的名称和路径等提示统一使用 `data-tooltip`，由 `TooltipLayer` 渲染；设置项的 `HelpTip` 复用同一个 `.hud-tooltip` 外观。禁止用 HTML `title` 提供悬浮提示，ESLint 必须拦截；iframe 的无障碍标题和组件的标题属性保留。纯图标操作继续提供本地化 `aria-label`，提示不能代替操作名称。浮层使用不透明深色表面、直角、细暖红边框、2px 黄色左轨与克制的偏移阴影；邻近入口定位，长内容可换行和滚动，四周至少保留 12px 视口边距，空间不足时自动向上展示。鼠标短暂停留后显示，键盘聚焦立即显示，可移入浮层阅读；移出或失焦关闭，Escape 只关闭当前提示，不能同时关闭所在弹窗，点击操作不能被提示拦截。浮层通过 Portal 进入当前模态层或全屏层，不能被滚动容器裁切；Web、TV、窄屏及禁用控件遵守同一约束。
 - 设置项的静态说明、参数帮助和安全提示统一放在对应文字后的 `HelpTip` 信息图标中，不另占常驻提示条或帮助行。鼠标悬浮、键盘聚焦和触屏点击均可查看；提示可悬浮阅读，Escape 先关闭提示，保留所在设置或弹窗，点击外部关闭。复用直角 HUD 浮层，邻近触发器定位并限制在视口内，通过 Portal 避免滚动容器裁切。提示按钮有本地化名称及关联说明，必须与字段 label、开关分开，查看提示不得修改表单、触发保存或切换开关。实时错误、校验结果、不可用原因和危险操作确认继续直接展示。
