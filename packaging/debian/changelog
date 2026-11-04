@@ -1,3 +1,9 @@
+cyberos (2.2.14) unstable; urgency=medium
+
+  * Reuse the shared quiet button surface and states for the mobile and TV playback collapse action.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Wed, 04 Nov 2026 10:20:19 +0000
+
 cyberos (2.2.13) unstable; urgency=medium
 
   * Keep shared field focus visible when the pointer hovers over focused workspace and modal editor inputs.

@@ -1,14 +1,14 @@
 {
   "name": "@cyberos/db",
-  "version": "2.2.13",
+  "version": "2.2.14",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@cyberos/capabilities": "2.2.13",
-    "@cyberos/shared": "2.2.13",
+    "@cyberos/capabilities": "2.2.14",
+    "@cyberos/shared": "2.2.14",
     "better-sqlite3": "^12.2.0"
   }
 }

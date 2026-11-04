@@ -1,12 +1,12 @@
 {
   "name": "@cyberos/storage-tools",
-  "version": "2.2.13",
+  "version": "2.2.14",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@cyberos/shared": "2.2.13"
+    "@cyberos/shared": "2.2.14"
   }
 }
