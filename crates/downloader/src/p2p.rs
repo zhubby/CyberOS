@@ -1,6 +1,9 @@
+use std::collections::BTreeMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
+
+use futures_util::StreamExt;
 
 use crate::db::{Db, ResolvedTorrentPreview, Task, TorrentFile, TorrentPreview, TorrentProgress};
 use crate::error::{DownloadError, ErrorCode};
@@ -91,10 +94,12 @@ impl TorrentEngine {
         output_folder: &Path,
         initial_peers: Vec<SocketAddr>,
     ) -> Result<Arc<librqbit::ManagedTorrent>, DownloadError> {
+        let parsed = parse_torrent_preview(metainfo)?;
+        let metainfo = filter_metainfo_tracker_networks(&parsed.metainfo).await?;
         let response = self
             .session
             .add_torrent(
-                librqbit::AddTorrent::from_bytes(metainfo.to_vec()),
+                librqbit::AddTorrent::from_bytes(metainfo),
                 Some(librqbit::AddTorrentOptions {
                     only_files: Some(selected_file_indices.to_vec()),
                     overwrite: true,
@@ -128,7 +133,7 @@ impl TorrentEngine {
         &self,
         preview: &TorrentPreview,
     ) -> Result<ResolvedTorrentPreview, DownloadError> {
-        let resolved = match preview.source_kind.as_str() {
+        let mut resolved = match preview.source_kind.as_str() {
             "torrent" => parse_torrent_preview(preview.metainfo.as_deref().ok_or_else(|| {
                 DownloadError::new(
                     ErrorCode::TorrentInvalid,
@@ -144,16 +149,11 @@ impl TorrentEngine {
                         false,
                     )
                 })?;
-                let magnet = librqbit::Magnet::parse(source).map_err(|error| {
-                    DownloadError::new(ErrorCode::TorrentInvalid, error.to_string(), false)
-                })?;
-                for tracker in &magnet.trackers {
-                    validate_tracker_network(tracker).await?;
-                }
+                let source = filter_magnet_trackers(source).await?;
                 let response = self
                     .session
                     .add_torrent(
-                        librqbit::AddTorrent::from_url(source.to_owned()),
+                        librqbit::AddTorrent::from_url(source),
                         Some(librqbit::AddTorrentOptions {
                             list_only: true,
                             ..Default::default()
@@ -182,7 +182,7 @@ impl TorrentEngine {
                 ));
             }
         };
-        validate_metainfo_tracker_networks(&resolved.metainfo).await?;
+        resolved.metainfo = filter_metainfo_tracker_networks(&resolved.metainfo).await?;
         Ok(resolved)
     }
 }
@@ -379,17 +379,8 @@ pub fn parse_torrent_preview(bytes: &[u8]) -> Result<ResolvedTorrentPreview, Dow
             false,
         )
     })?;
-    for tracker in metainfo.iter_announce() {
-        validate_tracker(std::str::from_utf8(tracker.as_ref()).map_err(|_| {
-            DownloadError::new(
-                ErrorCode::TorrentInvalid,
-                "torrent tracker is not UTF-8",
-                false,
-            )
-        })?)?;
-    }
     let info_hash = metainfo.info_hash.as_string();
-    let info = metainfo.info.data.validate().map_err(|error| {
+    let info = metainfo.info.data.clone().validate().map_err(|error| {
         DownloadError::new(
             ErrorCode::TorrentInvalid,
             format!("invalid torrent file paths: {error}"),
@@ -437,79 +428,253 @@ pub fn parse_torrent_preview(bytes: &[u8]) -> Result<ResolvedTorrentPreview, Dow
             size_bytes: file.len,
         });
     }
+    let trackers = usable_trackers(metainfo.iter_announce().map(|tracker| {
+        let raw = tracker_text(tracker.as_ref())?;
+        validate_tracker(raw)?;
+        Ok(raw)
+    }))?;
     Ok(ResolvedTorrentPreview {
         info_hash,
         name,
-        metainfo: bytes.to_vec(),
+        metainfo: encode_torrent_trackers(&metainfo, &trackers),
         total_bytes,
         files,
     })
 }
 
-fn validate_tracker(raw: &str) -> Result<(), DownloadError> {
-    let tracker = url::Url::parse(raw).map_err(|_| unsafe_tracker())?;
-    if !matches!(tracker.scheme(), "http" | "https" | "udp")
-        || !tracker.username().is_empty()
-        || tracker.password().is_some()
-        || tracker.host_str().is_none()
-    {
-        return Err(unsafe_tracker());
-    }
-    if tracker
-        .host_str()
-        .and_then(|host| host.parse::<IpAddr>().ok())
-        .is_some_and(is_non_public_ip)
-    {
-        return Err(unsafe_tracker());
-    }
-    Ok(())
+fn tracker_text(bytes: &[u8]) -> Result<&str, DownloadError> {
+    std::str::from_utf8(bytes).map_err(|_| blocked_tracker("tracker URL is not UTF-8"))
 }
 
-async fn validate_metainfo_tracker_networks(bytes: &[u8]) -> Result<(), DownloadError> {
+fn usable_trackers<T>(
+    results: impl IntoIterator<Item = Result<T, DownloadError>>,
+) -> Result<Vec<T>, DownloadError> {
+    let mut trackers = Vec::new();
+    let mut errors = Vec::new();
+    for result in results {
+        match result {
+            Ok(tracker) => trackers.push(tracker),
+            Err(error) => {
+                tracing::warn!(message = %error.message, "ignoring unusable torrent tracker");
+                errors.push(error);
+            }
+        }
+    }
+    if trackers.is_empty() && !errors.is_empty() {
+        return Err(DownloadError::new(
+            errors[0].code,
+            format!(
+                "no usable public tracker: {}",
+                errors
+                    .iter()
+                    .take(5)
+                    .map(|error| error.message.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ),
+            errors.iter().all(|error| error.retryable),
+        ));
+    }
+    Ok(trackers)
+}
+
+fn validate_tracker(raw: &str) -> Result<url::Url, DownloadError> {
+    let tracker = url::Url::parse(raw).map_err(|_| blocked_tracker("invalid tracker URL"))?;
+    let host = tracker
+        .host_str()
+        .unwrap_or("<missing host>")
+        .trim_matches(['[', ']']);
+    if !matches!(tracker.scheme(), "http" | "https" | "udp") {
+        return Err(blocked_tracker(format!(
+            "tracker {host}: unsupported URL scheme"
+        )));
+    }
+    if !tracker.username().is_empty() || tracker.password().is_some() {
+        return Err(blocked_tracker(format!(
+            "tracker {host}: URL credentials are not supported"
+        )));
+    }
+    if tracker.host_str().is_none() {
+        return Err(blocked_tracker("tracker URL has no host"));
+    }
+    if host.parse::<IpAddr>().is_ok_and(is_non_public_ip) {
+        return Err(blocked_tracker(format!(
+            "tracker {host}: non-public address is blocked"
+        )));
+    }
+    Ok(tracker)
+}
+
+async fn filter_tracker_networks(trackers: &[&str]) -> Result<Vec<String>, DownloadError> {
+    let trackers = trackers
+        .iter()
+        .map(|tracker| (*tracker).to_owned())
+        .collect::<Vec<_>>();
+    let results = futures_util::stream::iter(trackers)
+        .map(|tracker| async move {
+            validate_tracker_network(&tracker).await?;
+            Ok(tracker)
+        })
+        .buffered(8)
+        .collect::<Vec<_>>()
+        .await;
+    usable_trackers(results)
+}
+
+async fn filter_metainfo_tracker_networks(bytes: &[u8]) -> Result<Vec<u8>, DownloadError> {
     let metainfo = librqbit::torrent_from_bytes(bytes)
         .map_err(|error| DownloadError::new(ErrorCode::TorrentInvalid, error.to_string(), false))?;
-    for tracker in metainfo.iter_announce() {
-        let tracker = std::str::from_utf8(tracker.as_ref()).map_err(|_| unsafe_tracker())?;
-        validate_tracker_network(tracker).await?;
+    let trackers = usable_trackers(
+        metainfo
+            .iter_announce()
+            .map(|tracker| tracker_text(tracker.as_ref())),
+    )?;
+    let trackers = filter_tracker_networks(&trackers).await?;
+    Ok(encode_torrent_trackers(&metainfo, &trackers))
+}
+
+async fn filter_magnet_trackers(source: &str) -> Result<String, DownloadError> {
+    let magnet = librqbit::Magnet::parse(source)
+        .map_err(|error| DownloadError::new(ErrorCode::TorrentInvalid, error.to_string(), false))?;
+    let trackers = magnet
+        .trackers
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let trackers = filter_tracker_networks(&trackers).await?;
+    let mut source = url::Url::parse(source)
+        .map_err(|_| DownloadError::new(ErrorCode::TorrentInvalid, "invalid magnet URL", false))?;
+    let pairs = source
+        .query_pairs()
+        .filter(|(key, _)| key != "tr")
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect::<Vec<_>>();
+    source.set_query(None);
+    {
+        let mut query = source.query_pairs_mut();
+        query.extend_pairs(pairs);
+        for tracker in trackers {
+            query.append_pair("tr", &tracker);
+        }
     }
-    Ok(())
+    Ok(source.into())
 }
 
 async fn validate_tracker_network(raw: &str) -> Result<(), DownloadError> {
-    validate_tracker(raw)?;
-    let tracker = url::Url::parse(raw).map_err(|_| unsafe_tracker())?;
-    let host = tracker.host_str().ok_or_else(unsafe_tracker)?;
+    let tracker = validate_tracker(raw)?;
+    let host = tracker
+        .host_str()
+        .expect("validated tracker host")
+        .trim_matches(['[', ']']);
     if host.parse::<IpAddr>().is_ok() {
         return Ok(());
     }
     let port = tracker
         .port_or_known_default()
         .or_else(|| (tracker.scheme() == "udp").then_some(80))
-        .ok_or_else(unsafe_tracker)?;
-    let addresses = tokio::time::timeout(
+        .ok_or_else(|| blocked_tracker(format!("tracker {host}: missing port")))?;
+    validate_tracker_dns(
+        host,
+        async {
+            tokio::net::lookup_host((host, port))
+                .await
+                .map(|addresses| addresses.collect())
+        },
         std::time::Duration::from_secs(5),
-        tokio::net::lookup_host((host, port)),
     )
     .await
-    .map_err(|_| unsafe_tracker())?
-    .map_err(|_| unsafe_tracker())?
-    .collect::<Vec<_>>();
-    if addresses.is_empty()
-        || addresses
-            .iter()
-            .any(|address| is_non_public_ip(address.ip()))
+}
+
+async fn validate_tracker_dns(
+    host: &str,
+    lookup: impl std::future::Future<Output = std::io::Result<Vec<SocketAddr>>>,
+    timeout: std::time::Duration,
+) -> Result<(), DownloadError> {
+    let addresses = tokio::time::timeout(timeout, lookup)
+        .await
+        .map_err(|_| {
+            DownloadError::new(
+                ErrorCode::Timeout,
+                format!("tracker {host}: DNS lookup timed out"),
+                true,
+            )
+        })?
+        .map_err(|error| {
+            DownloadError::new(
+                ErrorCode::Dns,
+                format!("tracker {host}: DNS lookup failed: {error}"),
+                true,
+            )
+        })?;
+    if addresses.is_empty() {
+        return Err(DownloadError::new(
+            ErrorCode::Dns,
+            format!("tracker {host}: DNS returned no addresses"),
+            true,
+        ));
+    }
+    if let Some(address) = addresses
+        .iter()
+        .find(|address| is_non_public_ip(address.ip()))
     {
-        return Err(unsafe_tracker());
+        return Err(blocked_tracker(format!(
+            "tracker {host}: DNS resolved to non-public address {}",
+            address.ip()
+        )));
     }
     Ok(())
 }
 
-fn unsafe_tracker() -> DownloadError {
-    DownloadError::new(
-        ErrorCode::TorrentUnsafe,
-        "torrent must use a public tracker",
-        false,
-    )
+fn blocked_tracker(message: impl Into<String>) -> DownloadError {
+    DownloadError::new(ErrorCode::TorrentUnsafe, message, false)
+}
+
+fn bencode_string(bytes: &[u8]) -> Vec<u8> {
+    let mut encoded = format!("{}:", bytes.len()).into_bytes();
+    encoded.extend_from_slice(bytes);
+    encoded
+}
+
+fn encode_torrent_trackers(
+    metainfo: &librqbit::TorrentMetaV1Borrowed<'_>,
+    trackers: &[impl AsRef<str>],
+) -> Vec<u8> {
+    let mut fields: BTreeMap<&[u8], Vec<u8>> = BTreeMap::new();
+    for (key, value) in [
+        (b"comment".as_slice(), metainfo.comment.as_ref()),
+        (b"created by".as_slice(), metainfo.created_by.as_ref()),
+        (b"encoding".as_slice(), metainfo.encoding.as_ref()),
+        (b"publisher".as_slice(), metainfo.publisher.as_ref()),
+        (b"publisher-url".as_slice(), metainfo.publisher_url.as_ref()),
+    ] {
+        if let Some(value) = value {
+            fields.insert(key, bencode_string(value.as_ref()));
+        }
+    }
+    if let Some(date) = metainfo.creation_date {
+        fields.insert(b"creation date", format!("i{date}e").into_bytes());
+    }
+    // Re-encoding the info dictionary can change the swarm identity or file paths.
+    // Copy its exact bytes, including fields unknown to librqbit.
+    fields.insert(b"info", metainfo.info.raw_bytes.as_ref().to_vec());
+    if let Some(first) = trackers.first() {
+        fields.insert(b"announce", bencode_string(first.as_ref().as_bytes()));
+        let mut list = b"l".to_vec();
+        for tracker in trackers {
+            list.push(b'l');
+            list.extend(bencode_string(tracker.as_ref().as_bytes()));
+            list.push(b'e');
+        }
+        list.push(b'e');
+        fields.insert(b"announce-list", list);
+    }
+    let mut bytes = b"d".to_vec();
+    for (key, value) in fields {
+        bytes.extend(bencode_string(key));
+        bytes.extend(value);
+    }
+    bytes.push(b'e');
+    bytes
 }
 
 fn is_non_public_ip(address: IpAddr) -> bool {
@@ -524,7 +689,10 @@ fn is_non_public_ip(address: IpAddr) -> bool {
                 || address.is_documentation()
         }
         IpAddr::V6(address) => {
-            address.is_loopback()
+            address
+                .to_ipv4_mapped()
+                .is_some_and(|address| is_non_public_ip(IpAddr::V4(address)))
+                || address.is_loopback()
                 || address.is_unspecified()
                 || address.is_multicast()
                 || (address.segments()[0] & 0xfe00) == 0xfc00
@@ -588,6 +756,194 @@ mod tests {
     }
 
     #[test]
+    fn removes_blocked_trackers_without_changing_torrent_contents() {
+        let bytes = torrent_with_trackers(&[
+            "http://127.0.0.1:8080/announce",
+            "udp://8.8.8.8:6969/announce",
+            "file:///etc/passwd",
+        ]);
+        let original = librqbit::torrent_from_bytes(&bytes).unwrap();
+        let parsed = parse_torrent_preview(&bytes).unwrap();
+        let filtered = librqbit::torrent_from_bytes(&parsed.metainfo).unwrap();
+
+        assert_eq!(parsed.info_hash, original.info_hash.as_string());
+        assert_eq!(filtered.info.raw_bytes, original.info.raw_bytes);
+        assert_eq!(parsed.total_bytes, 12);
+        assert_eq!(parsed.files.len(), 2);
+        assert_eq!(
+            filtered
+                .iter_announce()
+                .map(|v| v.as_ref())
+                .collect::<Vec<_>>(),
+            vec![b"udp://8.8.8.8:6969/announce".as_slice()]
+        );
+        assert_eq!(
+            filtered.announce.unwrap().as_ref(),
+            b"udp://8.8.8.8:6969/announce"
+        );
+    }
+
+    #[test]
+    fn identifies_the_host_and_reason_when_no_public_tracker_remains() {
+        let error = parse_torrent_preview(&torrent_with_trackers(&[
+            "http://127.0.0.1:8080/announce",
+            "http://10.0.0.1/announce?passkey=secret",
+        ]))
+        .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::TorrentUnsafe);
+        assert!(error.message.contains("127.0.0.1"));
+        assert!(error.message.contains("non-public"));
+        assert!(!error.message.contains("secret"));
+    }
+
+    #[test]
+    fn preserves_unknown_info_fields_and_text_encoding() {
+        let base = torrent_with_trackers(&["udp://8.8.8.8:6969/announce"]);
+        let info_offset = base.windows(7).position(|v| v == b"4:infod").unwrap();
+        let mut bytes = base[..info_offset].to_vec();
+        bytes.extend_from_slice(b"8:encoding5:UTF-84:infod13:x-content-tag4:keep");
+        bytes.extend_from_slice(&base[info_offset + 7..]);
+        let original = librqbit::torrent_from_bytes(&bytes).unwrap();
+        let parsed = parse_torrent_preview(&bytes).unwrap();
+        let filtered = librqbit::torrent_from_bytes(&parsed.metainfo).unwrap();
+
+        assert_eq!(filtered.info.raw_bytes, original.info.raw_bytes);
+        assert_eq!(filtered.info_hash, original.info_hash);
+        assert_eq!(filtered.encoding.unwrap().as_ref(), b"UTF-8");
+    }
+
+    #[tokio::test]
+    async fn distinguishes_dns_failure_timeout_and_non_public_results() {
+        let timeout = std::time::Duration::from_millis(1);
+        let error = validate_tracker_dns(
+            "missing.invalid",
+            async { Err(std::io::Error::from(std::io::ErrorKind::NotFound)) },
+            timeout,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::Dns);
+        assert!(error.retryable);
+        assert!(error.message.contains("missing.invalid"));
+        assert!(error.message.contains("DNS lookup failed"));
+
+        let error = validate_tracker_dns("slow.example", std::future::pending(), timeout)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::Timeout);
+        assert!(error.message.contains("slow.example"));
+        assert!(error.message.contains("timed out"));
+
+        let error = validate_tracker_dns(
+            "mixed.example",
+            async {
+                Ok(vec![
+                    "8.8.8.8:80".parse().unwrap(),
+                    "10.255.255.254:80".parse().unwrap(),
+                ])
+            },
+            timeout,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::TorrentUnsafe);
+        assert!(!error.retryable);
+        assert!(error.message.contains("mixed.example"));
+        assert!(error.message.contains("10.255.255.254"));
+
+        let error = validate_tracker_dns("empty.example", async { Ok(Vec::new()) }, timeout)
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::Dns);
+        assert!(error.message.contains("no addresses"));
+    }
+
+    #[tokio::test]
+    async fn filters_magnet_trackers_without_injecting_query_parameters() {
+        let source = "magnet:?xt=urn:btih:0123456789012345678901234567890123456789&dn=release&tr=http%3A%2F%2F127.0.0.1%2Fannounce&tr=udp%3A%2F%2F8.8.8.8%3A6969%2Fannounce%3Fa%3D1%26tr%3Dhttp%3A%2F%2F10.0.0.1%2Fannounce";
+        let filtered = filter_magnet_trackers(source).await.unwrap();
+        let magnet = librqbit::Magnet::parse(&filtered).unwrap();
+        assert_eq!(
+            magnet.as_id20().unwrap().as_string(),
+            "0123456789012345678901234567890123456789"
+        );
+        assert_eq!(magnet.name.as_deref(), Some("release"));
+        assert_eq!(
+            magnet.trackers,
+            ["udp://8.8.8.8:6969/announce?a=1&tr=http://10.0.0.1/announce"]
+        );
+
+        let error = filter_magnet_trackers("magnet:?xt=urn:btih:0123456789012345678901234567890123456789&tr=http://127.0.0.1/announce").await.unwrap_err();
+        assert_eq!(error.code, ErrorCode::TorrentUnsafe);
+        assert!(error.message.contains("127.0.0.1"));
+    }
+
+    #[tokio::test]
+    async fn filters_trackers_again_before_starting_the_download_engine() {
+        let root = tempfile::tempdir().unwrap();
+        let engine = TorrentEngine::new_isolated(root.path(), None)
+            .await
+            .unwrap();
+        let bytes = torrent_with_trackers(&[
+            "https://missing-tracker.invalid/announce",
+            "http://10.0.0.1/announce",
+            "udp://8.8.8.8:6969/announce",
+        ]);
+        let handle = engine
+            .add_torrent_bytes(&bytes, &[0, 1], root.path(), Vec::new())
+            .await
+            .unwrap();
+        let bytes = handle
+            .with_metadata(|metadata| metadata.torrent_bytes.clone())
+            .unwrap();
+        let parsed = librqbit::torrent_from_bytes(&bytes).unwrap();
+        assert_eq!(
+            parsed
+                .iter_announce()
+                .map(|v| v.as_ref())
+                .collect::<Vec<_>>(),
+            vec![b"udp://8.8.8.8:6969/announce".as_slice()]
+        );
+        engine.remove(&handle).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn accepts_public_ipv6_trackers_and_rejects_local_ipv6() {
+        validate_tracker_network("udp://[2606:4700:4700::1111]:6969/announce")
+            .await
+            .unwrap();
+        assert!(validate_tracker("http://[::1]:8080/announce").is_err());
+        assert!(validate_tracker("http://[::ffff:127.0.0.1]:8080/announce").is_err());
+    }
+
+    #[tokio::test]
+    async fn resolves_preview_when_one_tracker_has_no_dns_record() {
+        let root = tempfile::tempdir().unwrap();
+        let engine = TorrentEngine::new_isolated(root.path(), None)
+            .await
+            .unwrap();
+        let preview = TorrentPreview {
+            id: "mixed-trackers".to_owned(),
+            source_kind: "torrent".to_owned(),
+            source_uri: None,
+            metainfo: Some(torrent_with_trackers(&[
+                "https://missing-tracker.invalid/announce",
+                "udp://8.8.8.8:6969/announce",
+            ])),
+        };
+        let parsed = engine.resolve_preview(&preview).await.unwrap();
+        let filtered = librqbit::torrent_from_bytes(&parsed.metainfo).unwrap();
+        assert_eq!(
+            filtered
+                .iter_announce()
+                .map(|v| v.as_ref())
+                .collect::<Vec<_>>(),
+            vec![b"udp://8.8.8.8:6969/announce".as_slice()]
+        );
+    }
+
+    #[test]
     fn rejects_torrents_with_more_than_ten_thousand_files() {
         let error = parse_torrent_preview(&torrent_with_file_count(10_001)).unwrap_err();
 
@@ -640,6 +996,18 @@ mod tests {
             std::fs::read(download_root.path().join("hello.txt")).unwrap(),
             b"hello"
         );
+    }
+
+    fn torrent_with_trackers(trackers: &[&str]) -> Vec<u8> {
+        let mut bytes = b"d8:announce".to_vec();
+        let first = trackers.first().unwrap();
+        bytes.extend_from_slice(format!("{}:{}13:announce-listl", first.len(), first).as_bytes());
+        for tracker in trackers {
+            bytes.extend_from_slice(format!("l{}:{}e", tracker.len(), tracker).as_bytes());
+        }
+        bytes.push(b'e');
+        bytes.extend_from_slice(&torrent_fixture(false, None, false)[1..]);
+        bytes
     }
 
     fn torrent_fixture(private: bool, tracker: Option<&str>, symlink: bool) -> Vec<u8> {

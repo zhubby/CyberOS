@@ -1,3 +1,9 @@
+cyberos (2.2.11) unstable; urgency=medium
+
+  * Tolerate unavailable public torrent trackers while preserving tracker safety and torrent identity.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Wed, 04 Nov 2026 08:50:03 +0000
+
 cyberos (2.2.10) unstable; urgency=medium
 
   * Add the Bluetooth voice Agent channel and CyberController StickS3 BLE speaker playback.
