@@ -86,6 +86,7 @@ import { SettingsWirelessPage } from "./SettingsWirelessPage.js";
 import { SettingsProxyPage } from "./SettingsProxyPage.js";
 import { SettingsTailscalePage } from "./SettingsTailscalePage.js";
 import { SettingsAudioPage } from "./SettingsAudioPage.js";
+import { SettingsDockerPage } from "./SettingsDockerPage.js";
 import { SettingsBluetoothPage } from "./SettingsBluetoothPage.js";
 import { SettingsMediaPage } from "./SettingsMediaPage.js";
 import { SettingsSystemProfilePage } from "./SettingsSystemProfilePage.js";
@@ -583,6 +584,7 @@ export function SettingsModal({
               onChange={onDockerFormChange}
               onSubmit={onSubmit}
               onClose={onClose}
+              onNotifySuccess={onNotifySuccess}
             />
           ) : null}
 
@@ -1587,64 +1589,6 @@ function SettingsToolPolicyPage({
             </div>
           </section>
 
-        </div>
-      </div>
-
-      <footer className="settings-actions">
-        <span role="status">{saving ? t("common.actions.saving") : null}</span>
-        <div>
-          <button className="secondary-button" type="button" onClick={onClose}>
-            {t("common.actions.cancel")}
-          </button>
-          <button className="primary-button" type="submit" disabled={loading || saving} aria-busy={loading || saving || undefined}>
-            {saving ? t("common.actions.saving") : t("common.actions.saveChanges")}
-          </button>
-        </div>
-      </footer>
-    </form>
-  );
-}
-
-function SettingsDockerPage({
-  form,
-  loading,
-  saving,
-  onChange,
-  onSubmit,
-  onClose
-}: {
-  form: DockerSettingsFormState;
-  loading: boolean;
-  saving: boolean;
-  onChange: (form: DockerSettingsFormState) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <form className="settings-form" onSubmit={onSubmit}>
-      <div className="settings-content-body">
-        <div className="settings-page-grid settings-docker-grid">
-            <section className="settings-section-card">
-              <header>
-                <div>
-                  <h3>{t("settings.docker.runtimeTitle")}</h3>
-                  <p>{t("settings.docker.runtimeDescription")}</p>
-                </div>
-              </header>
-
-              <fieldset className="settings-field-grid settings-docker-runtime-grid" disabled={loading || saving}>
-                <span className="help-label settings-field-wide">
-                  <Switch
-                    checked={form.enabled}
-                    label={t("settings.docker.enabledField")}
-                    onCheckedChange={(enabled) => onChange({ ...form, enabled })}
-                  />
-                  <HelpTip label={t("settings.docker.enabledField")} content={t("settings.docker.socketNote")} />
-                </span>
-              </fieldset>
-            </section>
         </div>
       </div>
 

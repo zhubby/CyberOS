@@ -79,7 +79,6 @@ import { ShareManagementPanel } from "./ShareManagementPanel.js";
 import { applyTerminalOptions, terminalOptions } from "../../lib/terminal-theme.js";
 import { initialVmCreateForm, isArmVmArchitecture, validateVmCreateStep, vmSnapshotName, type VmCreateForm } from "../../lib/vm-create-form.js";
 import { DockerCreateDialogs } from "./DockerCreateDialogs.js";
-import { DockerDaemonSettingsDialog } from "./DockerDaemonSettingsDialog.js";
 import { DockerComposeAppDialog } from "./DockerComposeAppDialog.js";
 import { DockerImageManagement } from "./DockerImageManagement.js";
 import {
@@ -1103,7 +1102,6 @@ function DockerManagementPanel({
   const dashboard = useManagementDashboard("docker");
   const [summary, setSummary] = useState<DockerSummary | null>(null);
   const [daemonStatus, setDaemonStatus] = useState<DockerDaemonStatus | null>(null);
-  const [daemonSettingsOpen, setDaemonSettingsOpen] = useState(false);
   const [pressureHistory, setPressureHistory] = useState<DockerPressurePoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1409,14 +1407,6 @@ function DockerManagementPanel({
         actions={<PanelHeaderActions label={t("workspace.management.actions.label")}>
           <ManagementDashboardControls dashboard={dashboard} disabled={loading} />
           <PanelHeaderAction
-            label={t("workspace.management.docker.daemon.openSettings")}
-            type="button"
-            onClick={() => setDaemonSettingsOpen(true)}
-            disabled={loading || summary?.capabilities.canUpdateDaemonConfiguration !== true}
-          >
-            <Settings2 aria-hidden="true" size={17} />
-          </PanelHeaderAction>
-          <PanelHeaderAction
             label={t("common.actions.refresh")}
             type="button"
             onClick={refreshSummary}
@@ -1659,14 +1649,6 @@ function DockerManagementPanel({
       ) : null}
       {networkDetailsState ? <DockerNetworkDetailsDialog state={networkDetailsState} locale={locale} onClose={closeNetworkDetails} /> : null}
       {volumeDetailsState ? <DockerVolumeDetailsDialog state={volumeDetailsState} locale={locale} onClose={closeVolumeDetails} /> : null}
-      {daemonSettingsOpen ? (
-        <DockerDaemonSettingsDialog
-          status={daemonStatus}
-          onClose={() => setDaemonSettingsOpen(false)}
-          onRefreshSummary={refreshSummary}
-          onNotifySuccess={(message) => onNotifySuccess(message)}
-        />
-      ) : null}
       {composeDialog ? (
         <DockerComposeAppDialog
           app={composeDialog.app}

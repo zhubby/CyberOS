@@ -10,6 +10,7 @@ import {
   type DockerDaemonStatus
 } from "../../api.js";
 import { dockerDaemonTone, validateDockerDaemonJson } from "../../lib/docker-daemon.js";
+import { useModalDialog } from "./useModalDialog.js";
 
 interface DockerDaemonSettingsDialogProps {
   status: DockerDaemonStatus | null;
@@ -32,6 +33,11 @@ export function DockerDaemonSettingsDialog({
   const [conflict, setConflict] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"edit" | "confirm">("edit");
+  const requestClose = () => {
+    if (phase === "confirm") setPhase("edit");
+    else onClose();
+  };
+  const dialogRef = useModalDialog(requestClose, submitting);
   const jsonValidation = useMemo(() => validateDockerDaemonJson(content), [content]);
   const tooLarge = new TextEncoder().encode(content).byteLength > 256 * 1024;
   const changed = snapshot !== null && content !== snapshot.content;
@@ -66,17 +72,6 @@ export function DockerDaemonSettingsDialog({
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !submitting) {
-        if (phase === "confirm") setPhase("edit");
-        else onClose();
-      }
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [onClose, phase, submitting]);
 
   async function submit(restart: boolean) {
     if (!snapshot || !valid) return;
@@ -137,17 +132,19 @@ export function DockerDaemonSettingsDialog({
   return (
     <ModalPortal
       className="management-modal-backdrop docker-daemon-settings-backdrop"
-      onRequestClose={onClose}
+      onRequestClose={requestClose}
       closeDisabled={submitting}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !submitting) onClose();
       }}
     >
       <section
+        ref={dialogRef}
         className="management-modal docker-daemon-settings-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="docker-daemon-settings-title"
+        tabIndex={-1}
       >
         <header>
           <div>
