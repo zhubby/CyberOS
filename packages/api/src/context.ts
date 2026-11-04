@@ -20,8 +20,12 @@ import type { MonitoringEventBroker } from "./lib/monitoring-events.js";
 import type { TvModeRuntime } from "./lib/tv-mode.js";
 import type { TailscaleManagerRuntime } from "./lib/tailscale-manager.js";
 import type { MediaStreamRuntime } from "@cyberos/shared";
+import type { AudioRuntime } from "./lib/audio-runtime.js";
+import type { AudioCoordinator } from "./lib/audio-coordinator.js";
 
 export interface ApiRouteContext {
+  audio?: AudioCoordinator;
+  audioRuntime?: AudioRuntime;
   mediaStreamer?: MediaStreamRuntime;
   config: CyberOsRuntime;
   db: CyberOsDatabase;

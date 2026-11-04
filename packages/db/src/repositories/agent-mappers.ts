@@ -9,6 +9,8 @@ import type { DbEventRow, DbJobRow, DbMessageRow, DbSessionRow } from "./reposit
 export function mapSession(row: DbSessionRow): AgentSessionRecord {
   return {
     id: row.id,
+    kind: row.kind ?? "chat",
+    contextGeneration: row.context_generation ?? 0,
     currentPath: row.current_path,
     piResourcesTrusted: row.pi_resources_trusted === 1,
     createdAt: row.created_at,

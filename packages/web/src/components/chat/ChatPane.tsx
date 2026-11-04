@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   MessageSquare,
   MessageSquarePlus,
+  Mic,
   Plus,
   RotateCcw,
   Send,
@@ -75,8 +76,10 @@ export function shouldSubmitComposerMessage(event: ComposerKeyDownEvent): boolea
 export function agentSessionHeaderTitle(
   session: SessionSummary | undefined,
   newSessionTitle: string,
-  workspaceFallback: string
+  workspaceFallback: string,
+  voiceTitle = "System voice session"
 ): string {
+  if (session?.kind === "voice") return voiceTitle;
   if (!session?.firstMessage?.trim() && !session?.lastMessage?.trim()) {
     return newSessionTitle;
   }
@@ -154,7 +157,7 @@ function SessionList({
   return (
     <nav className="session-list" aria-label={ariaLabel}>
       {sessions.map((item) => {
-        const title = sessionTitle(item, workspaceAgentTitle);
+        const title = item.kind === "voice" ? t("settings.audio.voiceSession") : sessionTitle(item, workspaceAgentTitle);
         const relativeTime = formatRelativeTime(item.updatedAt, locale, now);
         const baseLabel = `${title} - ${relativeTime} (${formatDate(item.updatedAt, locale)})`;
         const label = item.pendingApprovalCount > 0
@@ -171,7 +174,7 @@ function SessionList({
             aria-label={label}
             aria-current={item.id === activeSessionId ? "page" : undefined}
           >
-            <Bot aria-hidden="true" size={19} />
+            {item.kind === "voice" ? <Mic aria-hidden="true" size={19} /> : <Bot aria-hidden="true" size={19} />}
             {item.pendingApprovalCount > 0 ? (
               <span className="session-approval-badge" aria-hidden="true">
                 {item.pendingApprovalCount > 9 ? "9+" : item.pendingApprovalCount}
@@ -286,12 +289,12 @@ function ChatPaneContent({
   const hasConversationContent = transcript.length > 0
     || activeCapabilityApprovals.length > 0
     || agentToolActivities.length > 0;
-  const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), workspaceAgentTitle);
+  const activeSessionTitle = agentSessionHeaderTitle(activeSessionSummary, t("chat.newSessionTitle"), workspaceAgentTitle, t("settings.audio.voiceSession"));
   const activeSessionIndex = sessions.findIndex((item) => item.id === activeSessionId);
   const activeSessionCode = String((activeSessionIndex >= 0 ? activeSessionIndex : 0) + 1).padStart(2, "0");
   const composerFeedback = composerFeedbackState({ activeJobId, activeJobStatus, messageSubmitting, status });
   const activeAgentTurn = hasActiveAgentTurn(activeJobId, activeJobStatus);
-  const deleteDisabled = !activeSessionSummary || composerFeedback !== null || status === "cancelling";
+  const deleteDisabled = !activeSessionSummary || activeSessionSummary.kind === "voice" || composerFeedback !== null || status === "cancelling";
   const composerStatusId = "composer-status";
   const ComposerIcon = composerFeedback ? LoaderCircle : Send;
   const composerIconClass = composerFeedback ? "composer-spinner" : undefined;

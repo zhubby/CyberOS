@@ -85,10 +85,15 @@ describe("Pi agent provider configuration", () => {
 });
 
 describe("Pi agent response handling", () => {
-  it("persists ordinary SDK replies in their own turn before completion and after reopening", async () => {
+  it("persists replies, resets cached voice context and reopens only the new provider history", async () => {
     let requestCount = 0;
+    const userMessages: string[][] = [];
     const server = createServer(async (request, response) => {
-      for await (const chunk of request) void chunk;
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = JSON.parse(Buffer.concat(chunks).toString()) as { messages: { role: string; content: string | { type: string; text?: string }[] }[] };
+      userMessages.push(body.messages.filter((message) => message.role === "user").map((message) => typeof message.content === "string"
+        ? message.content : message.content.filter((part) => part.type === "text").map((part) => part.text ?? "").join("")));
       requestCount += 1;
       response.writeHead(200, { "Content-Type": "text/event-stream" });
       for (const choice of [
@@ -109,10 +114,11 @@ describe("Pi agent response handling", () => {
     let providerSession: AgentProviderSessionRecord | null = null;
     const timestamp = new Date().toISOString();
     try {
-      for (let turn = 1; turn <= 3; turn += 1) {
+      for (let turn = 1; turn <= 4; turn += 1) {
+        if (turn === 3) providerSession = null;
         const events: PiAgentEmitEvent[] = [];
         const input: PiAgentRuntimeInput = {
-          session: { id: "test-session", currentPath: ".", createdAt: timestamp, updatedAt: timestamp },
+          session: { id: "test-session", kind: "voice", contextGeneration: turn >= 3 ? 1 : 0, currentPath: ".", createdAt: timestamp, updatedAt: timestamp },
           root: { path: tempDir }, workingPath: ".", dataDir: tempDir,
           message: `Question ${turn}`,
           modelSettings: modelProviderSettings({
@@ -143,12 +149,16 @@ describe("Pi agent response handling", () => {
           payload: expect.objectContaining({ content: `Answer ${turn}` })
         })]);
         expect(events.indexOf(replies[0]!)).toBeLessThan(events.findIndex((event) => event.type === "agent.completed"));
-        if (turn === 2) {
+        if (turn === 3) {
           await host.dispose();
           host = new PiAgentSessionHost(tempDir);
         }
       }
-      expect(requestCount).toBe(3);
+      expect(requestCount).toBe(4);
+      expect(userMessages).toEqual([
+        ["Question 1"], ["Question 1", "Question 2"],
+        ["Question 3"], ["Question 3", "Question 4"]
+      ]);
     } finally {
       await host.dispose();
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

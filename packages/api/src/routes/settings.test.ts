@@ -25,12 +25,25 @@ afterEach(async () => {
 });
 
 describe("settings routes", () => {
+  it("accepts write-only audio tokens without exposing them in any settings response", async () => {
+    const server = createServer(db);
+    const saved = await server.inject({ method: "PATCH", url: "/api/settings/audio", payload: { cyberAudioToken: "sensitive-voice-token" } });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().settings.tokenConfigured).toBe(true);
+    expect(saved.body).not.toContain("sensitive-voice-token");
+    const read = await server.inject({ method: "GET", url: "/api/settings/audio" });
+    expect(read.body).not.toContain("cyberAudioToken");
+    expect((await server.inject({ method: "PATCH", url: "/api/settings/audio", payload: { cyberAudioToken: null } })).json().settings.tokenConfigured).toBe(false);
+    await server.close();
+  });
   it("persists the CyberAudio address across database reopen and allows clearing it", async () => {
     let server = createServer(db);
     const initial = await server.inject({ method: "GET", url: "/api/settings/audio" });
     expect(initial.statusCode).toBe(200);
-    expect(initial.json().settings).toEqual({
+    expect(initial.json().settings).toMatchObject({
       cyberAudioBaseUrl: null,
+      enabled: false,
+      tokenConfigured: false,
       updatedAt: new Date(0).toISOString()
     });
 

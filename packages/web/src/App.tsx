@@ -2863,7 +2863,17 @@ function AppContent() {
           networkSummary={settingsNetwork}
           bluetoothStatus={settingsBluetooth}
           resolvedLocale={resolvedLocale}
-          onClose={() => navigation.compact ? navigation.goBack() : setSettingsOpen(false)}
+          onClose={() => { if (navigation.compact) navigation.goBack(); else setSettingsOpen(false); void getSessions().then(setSessions).catch(() => {}); }}
+          onOpenVoiceSession={(sessionId) => {
+            void getSessions().then(async (nextSessions) => {
+              const voice = nextSessions.find((item) => item.id === sessionId);
+              if (!voice) return;
+              setSessions(nextSessions);
+              setSettingsOpen(false);
+              navigation.openApp("agent");
+              await selectSession(voice);
+            }).catch((nextError: unknown) => setError(toErrorMessage(nextError)));
+          }}
           onRequestSystemPower={handleSystemPower}
           onFormChange={setModelSettingsForm}
           onDockerFormChange={setDockerSettingsForm}

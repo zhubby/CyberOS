@@ -2438,7 +2438,7 @@ export const en = {
       },
       audio: {
         title: "Audio",
-        description: "Configure the CyberAudio service address."
+        description: "Voice services, trusted input, host output and the system voice session."
       },
       piAgent: {
         title: "Pi Agent",
@@ -2832,7 +2832,26 @@ export const en = {
       saved: "Audio settings saved.",
       loadFailed: "Unable to load Audio settings. Try again.",
       saveFailed: "Unable to save Audio settings. Your changes are kept; try again.",
-      invalidAddress: "Enter an HTTP/HTTPS address without credentials, query parameters, or a fragment."
+      invalidAddress: "Enter an HTTP/HTTPS address without credentials, query parameters, or a fragment.",
+      token: "API token", tokenConfigured: "Configured · leave blank to keep", tokenMissing: "Not configured",
+      clearToken: "Clear token", tokenWillClear: "Token clears on save", reachable: "Service reachable", authenticated: "Token valid",
+      ready: "Ready", notReady: "Not ready", untested: "Not tested", offline: "Offline", selectDevice: "Select a device",
+      testService: "Test service & load voices", voiceInput: "Voice input", enabled: "Enable system voice channel",
+      inputHint: "Only the selected paired, trusted ATVV remote can submit voice. Bluetooth pairing stays in Bluetooth settings.",
+      inputDevice: "Trusted input", maxSeconds: "Maximum recording (seconds)", deviceState: "Device connection", protocol: "Protocol",
+      refreshDevices: "Refresh devices", testRecording: "Arm recording test", waitingRecording: "Waiting for remote…",
+      recordingHint: "Hold the voice button, then release. This test transcribes the next recording only; it never sends text to Agent. Times out after 45 seconds.",
+      sttLanguage: "Recognition language", ttsLanguage: "Reply language", autoLanguage: "Automatic", voice: "Voice",
+      instructions: "Speaking instructions", speechEnabled: "Speak final voice-channel replies", output: "Reply output",
+      outputDevice: "Host output device", volume: "Volume", outputHint: "Playback runs on CyberMachine, not this browser. No fallback if the selected output is offline. Media pauses during recording and speech.",
+      testSpeech: "Test speech output", stopSpeech: "Stop speech", speechTestDone: "Host speech playback completed. Confirm that you heard it.",
+      voiceSession: "System voice session", approvalHint: "Approval required. Open voice history to review; speech cannot bypass approval.",
+      sessionHint: "A persistent voice-only context. New recordings interrupt speech, not Agent tasks. Ordinary chat replies stay silent.",
+      openHistory: "Open voice history", resetContext: "Reset context", resetHint: "Keep history and session identity, but start a new model context. Active work must finish first.",
+      confirmReset: "Confirm context reset", contextReset: "Voice context reset; history retained.",
+      saveBeforeTest: "Save changes before testing. Enabling requires a service, token, trusted input and explicit output.",
+      testFailed: "Audio test failed. Check saved configuration, device diagnostics and service readiness.",
+      stages: { transcribing: "Transcribing", queued: "Queued", agent: "Agent / approval", synthesizing: "Synthesizing", speaking: "Speaking", completed: "Completed", interrupted: "Speech interrupted", failed: "Failed" }
     },
     alerts: {
       saved: "Alert settings saved.",
@@ -5832,7 +5851,7 @@ export const zhCN = {
       },
       audio: {
         title: "Audio",
-        description: "配置 CyberAudio 服务地址。"
+        description: "配置语音服务、可信输入、主机输出和系统语音会话。"
       },
       piAgent: {
         title: "Pi Agent",
@@ -6226,7 +6245,26 @@ export const zhCN = {
       saved: "Audio 设置已保存。",
       loadFailed: "无法加载 Audio 设置，请重试。",
       saveFailed: "无法保存 Audio 设置，已保留修改，请重试。",
-      invalidAddress: "请填写 HTTP/HTTPS 地址，不包含用户名、密码、查询参数或片段。"
+      invalidAddress: "请填写 HTTP/HTTPS 地址，不包含用户名、密码、查询参数或片段。",
+      token: "API Token", tokenConfigured: "已配置 · 留空保留", tokenMissing: "尚未配置",
+      clearToken: "清除 Token", tokenWillClear: "保存时清除 Token", reachable: "服务可达", authenticated: "Token 有效",
+      ready: "就绪", notReady: "未就绪", untested: "尚未测试", offline: "离线", selectDevice: "选择设备",
+      testService: "测试服务并读取音色", voiceInput: "语音输入", enabled: "启用系统语音通道",
+      inputHint: "仅选定的已配对、可信 ATVV 遥控器可投递语音。配对和连接仍在蓝牙设置中管理。",
+      inputDevice: "可信输入设备", maxSeconds: "录音上限（秒）", deviceState: "设备连接", protocol: "协议",
+      refreshDevices: "刷新设备", testRecording: "准备录音测试", waitingRecording: "等待遥控器录音…",
+      recordingHint: "按住语音键说话，松开结束。测试仅识别下一段录音，绝不投递 Agent；45 秒后超时。",
+      sttLanguage: "识别语言", ttsLanguage: "回复语言", autoLanguage: "自动", voice: "音色",
+      instructions: "朗读指令", speechEnabled: "播报语音通道的最终回复", output: "回复输出",
+      outputDevice: "主机输出设备", volume: "音量", outputHint: "在 CyberMachine 播放，而非浏览器。指定输出离线不切换其他扬声器；录音和播报期间暂停媒体。",
+      testSpeech: "测试语音输出", stopSpeech: "停止播报", speechTestDone: "主机播放已完成，请确认是否实际听到声音。",
+      voiceSession: "系统语音会话", approvalHint: "存在待审批操作，请打开语音历史审核；语音不能绕过审批。",
+      sessionHint: "保留独立语音上下文。新录音打断播报，不取消 Agent 任务；普通文字聊天不自动出声。",
+      openHistory: "打开语音历史", resetContext: "重置上下文", resetHint: "保留历史和会话 ID，重新开始模型上下文。需先结束活动任务。",
+      confirmReset: "确认重置上下文", contextReset: "语音上下文已重置，历史保留。",
+      saveBeforeTest: "修改后请先保存再测试。启用前需配置服务、Token、可信输入和明确的输出设备。",
+      testFailed: "音频测试失败，请检查已保存配置、设备诊断及服务就绪状态。",
+      stages: { transcribing: "识别中", queued: "排队中", agent: "Agent / 审批", synthesizing: "合成中", speaking: "播报中", completed: "已完成", interrupted: "播报已打断", failed: "失败" }
     },
     alerts: {
       saved: "告警设置已保存。",

@@ -1,6 +1,10 @@
 export * from "./lib/tailscale-api.js";
 import type {
-  AudioSettingsRecord,
+  PublicAudioSettings,
+  AudioSettingsPatch,
+  AudioStatus,
+  AudioServiceStatus,
+  AudioDevice,
   IscsiAction,
   IscsiSummary,
   AgentCapabilityId as SharedAgentCapabilityId,
@@ -312,6 +316,8 @@ export interface VmConsoleSession { id: string; operationId: string; domainName:
 
 export interface Session {
   id: string;
+  kind?: "chat" | "voice";
+  contextGeneration?: number;
   currentPath: string;
   createdAt?: string;
   updatedAt?: string;
@@ -526,7 +532,8 @@ export type AgentCapabilityId = SharedAgentCapabilityId;
 export type AgentCapabilityPolicyMode = SharedAgentCapabilityPolicyMode;
 
 export type ModelProviderSettings = PublicModelProviderSettings;
-export type AudioSettings = AudioSettingsRecord;
+export type AudioSettings = PublicAudioSettings;
+export type { AudioStatus, AudioServiceStatus, AudioDevice };
 
 export interface ModelProviderSettingsInput {
   providerName?: ModelProviderName;
@@ -1369,10 +1376,18 @@ export async function getAudioSettings(): Promise<AudioSettings> {
   return fetchJson<{ settings: AudioSettings }>("/api/settings/audio").then((body) => body.settings);
 }
 
-export async function updateAudioSettings(input: Omit<AudioSettings, "updatedAt">): Promise<AudioSettings> {
+export async function updateAudioSettings(input: AudioSettingsPatch): Promise<AudioSettings> {
   return fetchJson<{ settings: AudioSettings }>("/api/settings/audio", jsonRequest("PATCH", input))
     .then((body) => body.settings);
 }
+
+export function getAudioStatus(): Promise<AudioStatus> { return fetchJson("/api/audio/status"); }
+export function getAudioDevices(): Promise<{ inputs: AudioDevice[]; outputs: AudioDevice[] }> { return fetchJson("/api/audio/devices"); }
+export function testAudioService(): Promise<AudioServiceStatus> { return fetchJson("/api/audio/test/service", jsonRequest("POST", {})); }
+export function testAudioRecording(): Promise<{ armed: boolean }> { return fetchJson("/api/audio/test/recording", jsonRequest("POST", {})); }
+export function testAudioSpeech(): Promise<{ played: boolean }> { return fetchJson("/api/audio/test/speech", jsonRequest("POST", {})); }
+export function stopAudioSpeech(): Promise<{ stopped: boolean }> { return fetchJson("/api/audio/stop", jsonRequest("POST", {})); }
+export function resetAudioContext(): Promise<{ session: Session }> { return fetchJson("/api/audio/session/reset", jsonRequest("POST", {})); }
 
 export async function updateSystemProfileSettings(
   input: Partial<Omit<SystemProfileSettings, "updatedAt">>

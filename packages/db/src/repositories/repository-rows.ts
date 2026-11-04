@@ -43,6 +43,8 @@ import type {
 
 export type DbSessionRow = {
   id: string;
+  kind?: "chat" | "voice";
+  context_generation?: number;
   current_path: string;
   pi_resources_trusted?: 0 | 1;
   created_at: string;

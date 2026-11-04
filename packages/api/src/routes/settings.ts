@@ -44,7 +44,7 @@ import type {
   AgentCapabilityId,
   AgentCapabilityPolicyMode,
   AgentCapabilityPolicySettingsRecord,
-  AudioSettingsRecord,
+  AudioSettingsPatch,
   DownloadSettingsRecord,
   IndexerSettingsRecord,
   BackupSettingsRecord,
@@ -72,27 +72,33 @@ import { collectSystemInfo } from "../lib/system-info.js";
 import { collectSystemStorage } from "../lib/system-management.js";
 import { loadEffectiveShareSettings } from "../lib/share-credentials.js";
 import { PathSafetyError } from "@cyberos/storage-tools";
+import { AUDIO_SETTING_FIELDS, normalizeAudioSettings, publicAudioSettings } from "@cyberos/shared";
 import { listBackupDirectories } from "../lib/backup-directories.js";
 
-export function registerSettingsRoutes(server: FastifyInstance, { config, db, system, tvMode }: ApiRouteContext): void {
+export function registerSettingsRoutes(server: FastifyInstance, { config, db, system, tvMode, audio }: ApiRouteContext): void {
   server.get("/api/settings/audio", async (_request, reply) => {
     try {
-      return { settings: getAudioSettings(db) ?? defaultAudioSettings() };
+      return { settings: publicAudioSettings(getAudioSettings(db) ?? defaultAudioSettings()) };
     } catch (error) {
       return reply.status(409).send({ error: settingError(error), state: "attention" });
     }
   });
 
-  server.patch<{ Body: Partial<Omit<AudioSettingsRecord, "updatedAt">> }>("/api/settings/audio", async (request, reply) => {
+  server.patch<{ Body: AudioSettingsPatch }>("/api/settings/audio", async (request, reply) => {
     if (
       !request.body
       || typeof request.body !== "object"
       || Array.isArray(request.body)
-      || hasUnknownFields(request.body, ["cyberAudioBaseUrl"])
+      || hasUnknownFields(request.body, AUDIO_SETTING_FIELDS)
     ) return reply.status(400).send({ error: "Invalid audio settings fields" });
     try {
       const current = readForRepair(() => getAudioSettings(db), defaultAudioSettings);
-      return { settings: saveAudioSettings(db, { ...current, ...request.body }) };
+      const settings = normalizeAudioSettings({ ...current, ...request.body }, new Date().toISOString());
+      if (settings.enabled && !audio) throw new Error("Audio coordinator unavailable");
+      await audio?.validateSettings(settings);
+      const saved = saveAudioSettings(db, request.body);
+      await audio?.settingsChanged();
+      return { settings: publicAudioSettings(saved) };
     } catch (error) {
       return reply.status(400).send({ error: settingError(error) });
     }

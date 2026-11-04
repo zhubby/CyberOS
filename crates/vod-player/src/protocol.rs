@@ -53,6 +53,7 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
         .ok_or_else(|| VodError::protocol("Invalid VOD player command"))?;
     let allowed: &[&str] = match command_type {
         "status" => &["type"],
+        "audio-focus" => &["type", "leaseId", "action"],
         "play" => &[
             "type",
             "storagePoolId",
@@ -101,6 +102,11 @@ fn validate_command_fields(value: &serde_json::Value) -> Result<(), VodError> {
 #[serde(tag = "type", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Command {
     Status,
+    AudioFocus {
+        #[serde(rename = "leaseId")]
+        lease_id: String,
+        action: String,
+    },
     Guarded {
         #[serde(rename = "serviceInstanceId")]
         service_instance_id: String,
@@ -210,6 +216,13 @@ impl Command {
     fn validate(&self) -> Result<(), VodError> {
         match self {
             Self::Status => Ok(()),
+            Self::AudioFocus { lease_id, action } => {
+                validate_id(lease_id)?;
+                if !["acquire", "renew", "release"].contains(&action.as_str()) {
+                    return Err(VodError::protocol("Invalid audio focus action"));
+                }
+                Ok(())
+            }
             Self::Guarded {
                 service_instance_id,
                 expected_session_id,

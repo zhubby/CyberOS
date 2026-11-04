@@ -249,6 +249,7 @@ export class PiAgentSessionHost {
 
     const runtime = await this.runtimes.get(input.modelSettings, input.providerSession);
     const fingerprint = JSON.stringify({
+      contextGeneration: input.session.contextGeneration ?? 0,
       workingPath: workspace.relativePath,
       runtimeGeneration: runtime.generation,
       mcp: piMcpFingerprint(input.mcp),
@@ -278,6 +279,7 @@ export class PiAgentSessionHost {
     await mkdir(this.piAgentDir, { recursive: true });
     const runtime = await this.runtimes.get(commandInput.modelSettings, commandInput.providerSession);
     const fingerprint = JSON.stringify({
+      contextGeneration: commandInput.session.contextGeneration ?? 0,
       workingPath: workspace.relativePath,
       runtimeGeneration: runtime.generation,
       mcp: piMcpFingerprint(commandInput.mcp),
@@ -308,7 +310,7 @@ export class PiAgentSessionHost {
   ) {
     const sessionManager = input.providerSession?.sessionFile
       ? SessionManager.open(input.providerSession.sessionFile, this.piSessionDir, workspace.realPath)
-      : SessionManager.create(workspace.realPath, this.piSessionDir, { id: input.session.id });
+      : SessionManager.create(workspace.realPath, this.piSessionDir, { id: (input.session.contextGeneration ?? 0) > 0 ? randomUUID() : input.session.id });
     const settingsManager = SettingsManager.inMemory({
       defaultProvider: runtime.settings.providerName,
       ...(runtime.settings.model ? { defaultModel: runtime.settings.model } : {}),

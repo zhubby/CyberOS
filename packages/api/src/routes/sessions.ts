@@ -105,6 +105,10 @@ export function registerSessionRoutes(server: FastifyInstance, { db, config }: A
       reply.status(404).send({ error: "Session not found" });
       return;
     }
+    if (session.kind === "voice") {
+      reply.status(409).send({ error: "Use Audio settings to reset the system voice context" });
+      return;
+    }
     if (hasActiveJobsForSession(db, session.id)) {
       reply.status(409).send({ error: "Session has active work" });
       return;

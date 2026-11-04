@@ -14,7 +14,7 @@ STATE_PATH="$BASE_DIR/current-release.json"
 LOCK_PATH=/run/lock/cyberos-deploy.lock
 
 TIMERS='cyberos-maintenance.timer cyberos-health.timer cyberos-backup-daily.timer cyberos-backup-weekly.timer'
-CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-terminald.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-media-streamer.service cyberos-indexer.service'
+CORE_RUNTIME_SERVICES='cyberos-hostd.service cyberos-terminald.service cyberos-api.service cyberos-worker@1.service cyberos-photos.service cyberos-downloader.service cyberos-bluetoothd.service cyberos-audiod.service cyberos-media-streamer.service cyberos-indexer.service'
 RUNTIME_SERVICES="$CORE_RUNTIME_SERVICES cyberos-monitor.service cyberos-alerter.service"
 SHARE_SERVICES='smbd.service nmbd.service cyberos-webdav.service vsftpd.service nfs-server.service minidlna.service'
 OPTIONAL_RUNTIME_SERVICES='cyberos-host-accessd.service'
@@ -309,6 +309,7 @@ activate_runtime() {
   start_service_stably cyberos-photos.service
   start_service_stably cyberos-downloader.service
   start_service_stably cyberos-bluetoothd.service
+  start_service_stably cyberos-audiod.service
   start_service_stably cyberos-media-streamer.service
   start_service_stably cyberos-indexer.service
 

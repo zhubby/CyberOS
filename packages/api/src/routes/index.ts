@@ -32,6 +32,7 @@ import { registerMediaStreamRoutes } from "./media-stream.js";
 import { registerPlaybackRoutes } from "./playback.js";
 import { registerTvRoutes } from "./tv.js";
 import { registerAgentResourceRoutes } from "./agent-resources.js";
+import { registerAudioRoutes } from "./audio.js";
 
 export function registerApiRoutes(server: FastifyInstance, context: ApiRouteContext): void {
   registerHealthRoutes(server, context);
@@ -39,6 +40,7 @@ export function registerApiRoutes(server: FastifyInstance, context: ApiRouteCont
   registerBackupRoutes(server, context);
   registerHealthStatusRoutes(server, context);
   registerSettingsRoutes(server, context);
+  registerAudioRoutes(server, context);
   registerAgentResourceRoutes(server, context);
   registerSystemRoutes(server, context);
   registerTailscaleRoutes(server, context);

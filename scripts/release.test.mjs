@@ -118,6 +118,7 @@ describe("release versioning", () => {
 });
 
 const PRODUCT_CARGO_PACKAGES = [
+  ["crates/audiod/Cargo.toml", "cyberos-audiod"],
   ["crates/alerter/Cargo.toml", "cyberos-alerter"],
   ["crates/bluetoothd/Cargo.toml", "cyberos-bluetoothd"],
   ["crates/downloader/Cargo.toml", "cyberos-downloader"],
@@ -134,6 +135,7 @@ const PRODUCT_CARGO_PACKAGES = [
 
 async function writeFixture(root) {
   await Promise.all([
+    mkdir(path.join(root, "crates/audiod"), { recursive: true }),
     mkdir(path.join(root, "packages/api"), { recursive: true }),
     mkdir(path.join(root, "crates/alerter"), { recursive: true }),
     mkdir(path.join(root, "crates/bluetoothd"), { recursive: true }),

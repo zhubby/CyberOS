@@ -771,6 +771,13 @@
   flex-direction: column;
 }
 
+.audio-settings .settings-card-actions { flex-wrap: wrap; }
+.audio-settings .settings-card-actions > button { min-height: 40px; white-space: normal; }
+.audio-settings .settings-summary-list dd { white-space: normal; overflow-wrap: anywhere; }
+.audio-settings .settings-summary-list dd small,
+.audio-settings .settings-summary-list dd span { display: block; }
+.audio-test-result { display: block; overflow-wrap: anywhere; color: var(--text); }
+
 .settings-switch-row {
   display: flex;
   align-items: center;
