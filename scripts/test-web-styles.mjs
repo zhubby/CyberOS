@@ -141,6 +141,34 @@ test("management icon actions share quiet surfaces and target sizes inside modal
   }
 });
 
+test("hover preserves the focused field appearance in workspaces and modal editors", async t => {
+  for (const width of [1440, 390]) {
+    for (const modal of [false, true]) {
+      const page = await fixture(t, `
+        const field = React.createElement("label", { className: ${JSON.stringify(modal ? "docker-daemon-editor-field" : "form-field")} },
+          "Configuration", React.createElement("textarea", { "aria-label": "Configuration", defaultValue: "{}" }));
+        createRoot(document.getElementById("root")).render(${modal
+          ? 'React.createElement(ModalPortal, null, React.createElement("section", { className: "management-modal docker-daemon-settings-dialog", role: "dialog" }, field))'
+          : 'React.createElement("div", { style: { padding: 24 } }, field)'});
+      `, { viewport: { width, height: 900 } });
+      const field = page.getByRole("textbox", { name: "Configuration", exact: true });
+      await page.keyboard.press("Shift");
+      await field.focus();
+      await field.hover();
+      const actual = await field.evaluate(element => {
+        const style = globalThis.getComputedStyle(element);
+        return { focused: element.matches(":focus-visible"), hovered: element.matches(":hover"), border: style.borderColor,
+          shadow: style.boxShadow, outline: [style.outlineWidth, style.outlineColor, style.outlineOffset] };
+      });
+      assert.equal(actual.focused, true);
+      assert.equal(actual.hovered, true);
+      assert.equal(actual.border, "rgb(0, 240, 255)", `${width}px ${modal ? "modal" : "workspace"}`);
+      assert.equal(actual.shadow, "rgb(0, 240, 255) 3px 0px 0px 0px inset");
+      assert.deepEqual(actual.outline, ["2px", "rgb(0, 240, 255)", "3px"]);
+    }
+  }
+});
+
 test("Web and TV share menu surfaces and states while retaining TV target size", async t => {
   const render = `createRoot(globalThis.document.getElementById("root")).render(React.createElement("div", { className: "workspace-search-field", style: { width: "min(320px, 100%)", padding: 24 } },
     React.createElement(CustomSelect, { value: "one", ariaLabel: "Library", onChange: () => undefined,
