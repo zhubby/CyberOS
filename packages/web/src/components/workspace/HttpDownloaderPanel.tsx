@@ -27,6 +27,8 @@ import {
   deleteDownload,
   deleteTorrentPreview,
   getDownloads,
+  getDownloadSettings,
+  getFileMeta,
   getTorrentPreview,
   uploadTorrentPreview,
   type DownloadTask,
@@ -89,6 +91,8 @@ export function HttpDownloaderPanel({
   const [sha256, setSha256] = useState("");
   const [fileNameEdited, setFileNameEdited] = useState(false);
   const [target, setTarget] = useState<StorageFileSelection | null>(null);
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [targetError, setTargetError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [workerHealth, setWorkerHealth] = useState<DownloadWorkerHealth | null>(null);
@@ -96,6 +100,8 @@ export function HttpDownloaderPanel({
   const createUrlInputRef = useRef<HTMLInputElement | null>(null);
   const torrentFileInputRef = useRef<HTMLInputElement | null>(null);
   const torrentPreviewRequestRef = useRef(0);
+  const targetRequestRef = useRef(0);
+  const targetButtonRef = useRef<HTMLButtonElement | null>(null);
   const selectedPool = pools.find((pool) => pool.id === (target?.storagePoolId ?? selectedStoragePoolId)) ?? null;
   const mountedPools = useMemo(() => pools.filter((pool) => pool.status !== "offline"), [pools]);
   const torrentSource = sourceMode === "torrent-file" || isMagnetLink(url);
@@ -156,19 +162,8 @@ export function HttpDownloaderPanel({
 
   useEffect(() => () => {
     torrentPreviewRequestRef.current += 1;
+    targetRequestRef.current += 1;
   }, []);
-
-  useEffect(() => {
-    if (!createOpen) return;
-    const pool = pools.find((candidate) => candidate.id === selectedStoragePoolId) ?? mountedPools[0] ?? null;
-    if (!target && pool) {
-      setTarget({
-        storagePoolId: pool.id,
-        path: pool.path,
-        name: pool.name
-      });
-    }
-  }, [createOpen, mountedPools, pools, selectedStoragePoolId, target]);
 
   useEffect(() => {
     if (!createOpen) return;
@@ -200,8 +195,39 @@ export function HttpDownloaderPanel({
       onOpenStorage();
       return;
     }
-    const pool = pools.find((candidate) => candidate.id === selectedStoragePoolId) ?? mountedPools[0] ?? null;
-    setTarget(pool ? { storagePoolId: pool.id, path: pool.path, name: pool.name } : null);
+    const requestId = ++targetRequestRef.current;
+    setTarget(null);
+    setTargetLoading(true);
+    setTargetError(null);
+    void getDownloadSettings().then(async (settings) => {
+      if (targetRequestRef.current !== requestId) return;
+      if (settings.defaultStoragePoolId !== null && settings.defaultTargetDirectory !== null) {
+        const pool = mountedPools.find((candidate) => candidate.id === settings.defaultStoragePoolId);
+        if (!pool) {
+          setTargetError(t("settings.downloads.defaultDirectoryUnavailable"));
+          return;
+        }
+        try {
+          const directory = await getFileMeta(pool.id, settings.defaultTargetDirectory);
+          if (targetRequestRef.current !== requestId) return;
+          if (directory.kind !== "directory") {
+            setTargetError(t("settings.downloads.defaultDirectoryUnavailable"));
+            return;
+          }
+        } catch {
+          if (targetRequestRef.current === requestId) setTargetError(t("settings.downloads.defaultDirectoryUnavailable"));
+          return;
+        }
+        setTarget({ storagePoolId: pool.id, path: settings.defaultTargetDirectory, name: pool.name });
+      } else {
+        const pool = mountedPools.find((candidate) => candidate.id === selectedStoragePoolId) ?? mountedPools[0];
+        setTarget(pool ? { storagePoolId: pool.id, path: pool.path, name: pool.name } : null);
+      }
+    }).catch(() => {
+      if (targetRequestRef.current === requestId) setTargetError(t("settings.downloads.defaultDirectoryLoadFailed"));
+    }).finally(() => {
+      if (targetRequestRef.current === requestId) setTargetLoading(false);
+    });
     torrentPreviewRequestRef.current += 1;
     setSourceMode("link");
     setUrl("");
@@ -217,6 +243,8 @@ export function HttpDownloaderPanel({
 
   function closeCreateDialog() {
     if (submitting) return;
+    targetRequestRef.current += 1;
+    setTargetLoading(false);
     torrentPreviewRequestRef.current += 1;
     setResolvingTorrent(false);
     if (torrentPreview) {
@@ -338,6 +366,9 @@ export function HttpDownloaderPanel({
   }
 
   function handleDirectorySelection(selection: StorageFileSelection) {
+    targetRequestRef.current += 1;
+    setTargetLoading(false);
+    setTargetError(null);
     setTarget(selection);
     onSelectStoragePool(selection.storagePoolId);
     setPickerOpen(false);
@@ -345,7 +376,7 @@ export function HttpDownloaderPanel({
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!target || !fileName.trim() || !sourceReady || submitting) return;
+    if (!target || targetLoading || !fileName.trim() || !sourceReady || submitting) return;
     setSubmitting(true);
     onNotifyError(null);
     try {
@@ -646,23 +677,24 @@ export function HttpDownloaderPanel({
                 </div>
                 <div className="download-target-field">
                   <span>{t("workspace.downloads.targetDirectory")}</span>
-                  <div className="download-target-control">
+                  <div className="download-target-control" aria-busy={targetLoading || undefined}>
                     <div className="download-target-value" data-tooltip={target?.path ?? undefined}>
                       <FolderOpen aria-hidden="true" size={15} />
-                      <span>{target?.path ?? t("workspace.downloads.chooseDirectory")}</span>
+                      <span>{targetLoading ? t("common.states.loading") : target?.path ?? t("workspace.downloads.chooseDirectory")}</span>
                     </div>
-                    <button type="button" onClick={() => setPickerOpen(true)} disabled={!mountedPools.length}>
+                    <button ref={targetButtonRef} type="button" onClick={() => setPickerOpen(true)} disabled={!mountedPools.length}>
                       <FolderOpen aria-hidden="true" size={15} />
                       <span>{t("workspace.downloads.chooseDirectory")}</span>
                     </button>
                   </div>
                   <small>{selectedPool?.name ?? t("workspace.downloads.noStoragePool")}</small>
+                  {targetError ? <p role="alert">{targetError}</p> : null}
                 </div>
               </section>
             </div>
             <footer className="download-create-dialog-footer">
               <button type="button" className="secondary-button" onClick={closeCreateDialog} disabled={submitting}>{t("common.actions.cancel")}</button>
-              <button type="submit" className="primary-button" disabled={submitting || !target || !sourceReady || !fileName.trim()} aria-busy={submitting || undefined}>
+              <button type="submit" className="primary-button" disabled={submitting || targetLoading || !target || !sourceReady || !fileName.trim()} aria-busy={submitting || undefined}>
                 {submitting ? <LoaderCircle className="is-spinning" aria-hidden="true" size={15} /> : <Download aria-hidden="true" size={15} />}
                 <span>{t("workspace.downloads.startDownload")}</span>
               </button>
@@ -675,8 +707,10 @@ export function HttpDownloaderPanel({
         <StorageFilePickerDialog
           pools={mountedPools}
           initialPoolId={target?.storagePoolId ?? selectedStoragePoolId}
+          {...(target ? { initialPath: target.path } : {})}
           locale={locale}
           mode="directory"
+          returnFocusRef={targetButtonRef}
           onCancel={() => setPickerOpen(false)}
           onSelect={handleDirectorySelection}
           {...(onRequestCreateFolder ? { onRequestCreateFolder } : {})}

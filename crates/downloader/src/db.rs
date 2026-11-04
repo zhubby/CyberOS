@@ -102,6 +102,7 @@ pub struct PublishJournal {
 #[serde(rename_all = "camelCase", default)]
 pub struct DownloadSettings {
     pub concurrency: usize,
+    pub bt_concurrency: usize,
     pub parallel_requests_per_task: usize,
     pub segmented_download_min_bytes: u64,
     pub max_auto_retries: u32,
@@ -119,6 +120,7 @@ impl Default for DownloadSettings {
     fn default() -> Self {
         Self {
             concurrency: 1,
+            bt_concurrency: 3,
             parallel_requests_per_task: 4,
             segmented_download_min_bytes: 64 * 1024 * 1024,
             max_auto_retries: 5,
@@ -137,6 +139,7 @@ impl Default for DownloadSettings {
 impl DownloadSettings {
     fn validate(self) -> DbResult<Self> {
         validate_range("concurrency", self.concurrency as u64, 1, 10)?;
+        validate_range("btConcurrency", self.bt_concurrency as u64, 1, 10)?;
         validate_range(
             "parallelRequestsPerTask",
             self.parallel_requests_per_task as u64,
@@ -493,6 +496,7 @@ impl Db {
     }
 
     pub async fn claim_torrent(&self, worker_id: &str, lease: Duration) -> DbResult<Option<Task>> {
+        let limit = self.settings().await?.bt_concurrency as i64;
         let worker_id = worker_id.to_owned();
         self.call(move |connection| {
             let now = now_iso();
@@ -505,11 +509,13 @@ impl Db {
                     WHEN phase = 'publishing' THEN 'publishing' ELSE 'downloading' END, \
                   download_mode = 'torrent', next_retry_at = NULL, control_requested = NULL, updated_at = ?3 \
                 WHERE id = (SELECT id FROM download_tasks WHERE source_kind <> 'http' \
-                  AND ((status = 'queued' AND (next_retry_at IS NULL OR next_retry_at <= ?3)) \
+                  AND ((status = 'queued' AND (next_retry_at IS NULL OR next_retry_at <= ?3) \
+                    AND (SELECT COUNT(*) FROM download_tasks active WHERE active.source_kind <> 'http' \
+                      AND active.status = 'running' AND active.worker_id IS NOT NULL) < ?4) \
                     OR (status = 'seeding' AND (worker_id IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= ?3))) \
                   ORDER BY CASE status WHEN 'seeding' THEN 0 ELSE 1 END, COALESCE(next_retry_at, created_at), created_at LIMIT 1) \
                 RETURNING {}", TASK_COLUMNS.replace("d.", ""));
-            let mut task = connection.query_row(&sql, params![worker_id, lease_expires, now], map_task)
+            let mut task = connection.query_row(&sql, params![worker_id, lease_expires, now, limit], map_task)
                 .optional().map_err(DownloadError::database)?;
             if let Some(task) = task.as_mut() {
                 let mut statement = connection.prepare(
@@ -1480,6 +1486,139 @@ mod tests {
             )
             .unwrap();
         (directory, db, writer)
+    }
+
+    #[tokio::test]
+    async fn torrent_admission_defaults_to_three_and_observes_live_limits() {
+        let directory = tempfile::tempdir().unwrap();
+        let db = Db::open(&directory.path().join("test.sqlite")).unwrap();
+        db.test_call(|connection| {
+            connection
+                .execute_batch(TEST_SCHEMA)
+                .map_err(DownloadError::database)?;
+            for index in 0..12 {
+                insert_queued_torrent_task(connection, &format!("torrent-{index:02}"))?;
+            }
+            insert_queued_task(connection, "http")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        for _ in 0..3 {
+            assert!(
+                db.claim_torrent("worker", Duration::from_secs(30))
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        assert!(
+            db.claim_torrent("worker", Duration::from_secs(30))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            db.claim("http", Duration::from_secs(30))
+                .await
+                .unwrap()
+                .is_some()
+        );
+        for (limit, admitted) in [(1, 0), (10, 7)] {
+            db.test_call(move |connection| {
+                connection.execute(
+                    "INSERT OR REPLACE INTO system_settings VALUES ('download_settings', ?, 'now')",
+                    [format!(r#"{{"btConcurrency":{limit}}}"#)],
+                ).map_err(DownloadError::database)?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+            for _ in 0..admitted {
+                assert!(
+                    db.claim_torrent("worker", Duration::from_secs(30))
+                        .await
+                        .unwrap()
+                        .is_some()
+                );
+            }
+            assert!(
+                db.claim_torrent("worker", Duration::from_secs(30))
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        assert_eq!(db.torrent_running_count().await.unwrap(), 10);
+        db.test_call(|connection| {
+            connection
+                .execute(
+                    "UPDATE download_tasks SET status = 'seeding' WHERE id = 'torrent-00'",
+                    [],
+                )
+                .map_err(DownloadError::database)?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        assert!(
+            db.claim_torrent("worker", Duration::from_secs(30))
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(db.torrent_running_count().await.unwrap(), 10);
+        db.test_call(|connection| {
+            connection.execute("UPDATE download_tasks SET worker_id = NULL, lease_expires_at = NULL WHERE id = 'torrent-00'", [])
+                .map_err(DownloadError::database)?;
+            Ok(())
+        }).await.unwrap();
+        let seed = db
+            .claim_torrent("worker", Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(seed.status, "seeding");
+        assert_eq!(db.torrent_running_count().await.unwrap(), 10);
+    }
+
+    #[tokio::test]
+    async fn torrent_admission_serializes_competing_workers_at_each_limit() {
+        for limit in [1, 3, 10] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("test.sqlite");
+            let db = Db::open(&path).unwrap();
+            db.test_call(move |connection| {
+                connection
+                    .execute_batch(TEST_SCHEMA)
+                    .map_err(DownloadError::database)?;
+                connection
+                    .execute(
+                        "INSERT INTO system_settings VALUES ('download_settings', ?, 'now')",
+                        [format!(r#"{{"btConcurrency":{limit}}}"#)],
+                    )
+                    .map_err(DownloadError::database)?;
+                for index in 0..12 {
+                    insert_queued_torrent_task(connection, &format!("torrent-{index:02}"))?;
+                }
+                Ok(())
+            })
+            .await
+            .unwrap();
+            let other = Db::open(&path).unwrap();
+            let results = futures_util::future::join_all((0..12).map(|index| {
+                let database = if index % 2 == 0 { &db } else { &other };
+                async move {
+                    database
+                        .claim_torrent(&format!("worker-{index}"), Duration::from_secs(30))
+                        .await
+                        .unwrap()
+                }
+            }))
+            .await;
+            assert_eq!(results.iter().filter(|task| task.is_some()).count(), limit);
+            assert_eq!(db.torrent_running_count().await.unwrap(), limit);
+        }
     }
 
     async fn replace_segments_during_write(db: &Db, writer: Connection) -> DbResult<()> {

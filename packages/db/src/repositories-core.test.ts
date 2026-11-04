@@ -751,6 +751,19 @@ describe("core repositories", () => {
     expect(() => getDownloadSettings(db)).toThrow(/CyberOS 2.0 format/);
   });
 
+  it("adds only the new download defaults when reading an existing settings record", () => {
+    const legacy: Record<string, unknown> = { ...defaultDownloadSettings(), concurrency: 7, maxAutoRetries: 9 };
+    delete legacy.btConcurrency;
+    delete legacy.defaultStoragePoolId;
+    delete legacy.defaultTargetDirectory;
+    db.prepare("INSERT INTO system_settings (key, value_json, updated_at) VALUES ('download_settings', ?, ?)")
+      .run(JSON.stringify(legacy), legacy.updatedAt);
+    expect(getDownloadSettings(db)).toMatchObject({
+      concurrency: 7, maxAutoRetries: 9, btConcurrency: 3,
+      defaultStoragePoolId: null, defaultTargetDirectory: null
+    });
+  });
+
   it("claims download tasks in FIFO order and recovers expired leases", () => {
     const older = new Date("2026-01-01T00:00:00.000Z");
     const newer = new Date("2026-01-01T00:00:01.000Z");

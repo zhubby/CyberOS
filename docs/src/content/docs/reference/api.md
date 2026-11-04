@@ -127,7 +127,8 @@ JPEG、PNG、WebP、GIF、HEIC、HEIF、常见视频和 RAW 由内部 Rust `phot
 - `POST /api/downloads/torrent-previews` 接收 JSON Magnet 链接或字段名为 `torrent` 的单个 multipart `.torrent` 文件，上传上限 16 MiB。`GET /api/downloads/torrent-previews/:id` 返回解析状态与文件列表；解析完成后，`POST /api/downloads` 使用 `torrentPreviewId`、选中的文件索引、目标目录和输出文件夹名称创建 BT 任务。只支持公网非私有种子；私有种子、危险路径、本地/私网 tracker 与电驴链接均不接受。
 - `GET /api/downloads` 返回全局历史和 downloader worker health；任务记录包含 phase、单流/分段/BT 模式、checksum、稳定错误码、重试计数/时间、控制请求、上传字节/速率、peer 数和做种时间。`GET /api/downloads/:id/files` 返回 BT 文件级进度，`GET /api/downloads/events` 用 SSE 推送任务快照。
 - `POST /api/downloads/:id/pause|cancel` 对下载任务写入协作式控制请求；做种任务可暂停，`POST /api/downloads/:id/stop-seeding` 手动结束做种，`resume|retry` 按状态重新排队。发布已完成原子 rename 时最终内容不会被停止做种或暂停删除。`DELETE /api/downloads/:id` 只移除非运行、非做种任务。
-- `GET/PATCH /api/settings/downloads` 管理 HTTP 任务并发、每任务 Range 并发、分段阈值、自动重试/退避、连接/响应头/空闲读取超时、最低剩余空间和可选最大文件大小。BT 使用独立的单下载槽；已完成内容不占该槽，默认做种到分享率 1.0 或 2 小时，以先到者为准。
+- `GET/PATCH /api/settings/downloads` 管理 HTTP 并发 `concurrency` 和 BT 并发 `btConcurrency`，范围均为 1–10，BT 默认 3；HTTP 与 BT 独立计数，做种和种子预览不占下载名额。调整上限在下一轮调度生效，调低时不打断已有任务。其他字段包括每任务 Range 并发、分段阈值、自动重试/退避、连接/响应头/空闲读取超时、最低剩余空间和可选最大文件大小。BT 默认做种到分享率 1.0 或 2 小时，以先到者为准。
+- 下载设置中的 `defaultStoragePoolId`、`defaultTargetDirectory` 必须同时配置或同时为 `null`；目录是池内规范相对路径，`.` 表示存储池根目录。旧配置缺少新增字段时补入 BT 并发 3 和空默认目录，其他设置保留。Web 每次新建 HTTP、Magnet 或种子任务时读取默认位置，允许临时改选；未配置时使用当前已挂载存储池的根目录，已配置位置不可用时要求重新选择。创建接口仍要求明确目标，保存目录和创建任务均校验挂载、边界、存在性及写权限。
 - Rust `cyberos-downloader.service` 从 SQLite 领取带 30 秒租约的任务。HTTP 使用逐跳 DNS 公网校验、固定地址、安全重定向、持久化分段、空间预留、dirfd/`openat2` 路径边界、SHA-256 和 publish journal。BT 使用内嵌 `librqbit`，关闭 WebUI、HTTP API、持久化和 UPnP，在隐藏目录续传并以不覆盖 rename 发布；SQLite 始终是任务事实源，崩溃后未发布内容从暂存目录恢复，已发布内容从最终目录恢复做种。
 
 ## Docker daemon
