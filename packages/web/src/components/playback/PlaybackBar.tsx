@@ -8,7 +8,7 @@ export function PlaybackBar({ onOpenBluetoothSettings }: { onOpenBluetoothSettin
     <PlaybackDetails c={c} onOpenBluetoothSettings={onOpenBluetoothSettings} />
     {c.p.dockVisible ? <div id="playback-dock" data-tv-region="playback" className={`playback-shell${c.p.barVisible ? "" : " is-collapsed"}`}>
       {c.p.barVisible ? <PlaybackControls c={c} variant="bar" trailingControl={
-        <button className="playback-collapse" aria-label={c.t("playback.collapse")} data-tooltip={c.t("playback.collapse")} onClick={c.p.collapseBar}><ChevronDown size={18} aria-hidden="true" /></button>
+        <button className="plain-button playback-collapse" aria-label={c.t("playback.collapse")} data-tooltip={c.t("playback.collapse")} onClick={c.p.collapseBar}><ChevronDown size={18} aria-hidden="true" /></button>
       } /> : <PlaybackRestoreButton />}
     </div> : null}
   </>;
