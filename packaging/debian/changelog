@@ -1,3 +1,9 @@
+cyberos (2.2.12) unstable; urgency=medium
+
+  * Split frontend styles by responsibility and unify shared Web and TV controls, modal actions and field focus.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Wed, 04 Nov 2026 09:36:11 +0000
+
 cyberos (2.2.11) unstable; urgency=medium
 
   * Tolerate unavailable public torrent trackers while preserving tracker safety and torrent identity.
