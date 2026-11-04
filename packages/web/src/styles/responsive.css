@@ -87,10 +87,6 @@
     grid-template-columns: 1fr;
   }
 
-  .settings-editor-font-grid {
-    grid-template-columns: 1fr;
-  }
-
   .settings-version-details {
     grid-template-columns: 1fr;
   }

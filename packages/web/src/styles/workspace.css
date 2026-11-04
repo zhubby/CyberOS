@@ -5713,7 +5713,7 @@
 .storage-pool-member span:first-of-type {
   overflow: hidden;
   color: var(--text);
-  font-family: var(--mono-font, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;

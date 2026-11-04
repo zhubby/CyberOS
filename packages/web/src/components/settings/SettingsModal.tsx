@@ -72,13 +72,6 @@ import {
 import { formatBytes, formatLocaleNumber } from "../../i18n/format.js";
 import type { LanguagePreference, SupportedLocale } from "../../i18n/locale.js";
 import {
-  CODE_FONT_OPTIONS,
-  MAX_CODE_FONT_SIZE_PX,
-  MIN_CODE_FONT_SIZE_PX,
-  clampCodeFontSizePx,
-  type CodeFontSettings
-} from "../../lib/editor-settings.js";
-import {
   previewFileSizeLimitBytesToMiB,
   previewFileSizeLimitMiBToBytes
 } from "../../lib/preview-settings.js";
@@ -130,7 +123,6 @@ interface SettingsModalProps {
   toolPolicyForm: ToolPolicyFormState;
   languagePreference: LanguagePreference;
   previewFileSizeLimitBytes: number;
-  codeFontSettings: CodeFontSettings;
   networkSummary: NetworkSummary | null;
   bluetoothStatus: BluetoothStatus | null;
   resolvedLocale: SupportedLocale;
@@ -163,7 +155,6 @@ interface SettingsModalProps {
   onToolPolicyFormChange: (form: ToolPolicyFormState) => void;
   onLanguagePreferenceChange: (preference: LanguagePreference) => void;
   onPreviewFileSizeLimitChange: (bytes: number) => void;
-  onCodeFontSettingsChange: (settings: CodeFontSettings) => void;
   onWifiStatus: (status: WifiStatus) => void;
   onBluetoothStatus: (status: BluetoothStatus) => void;
   onNetworkRefresh: () => Promise<void>;
@@ -214,7 +205,6 @@ export function SettingsModal({
   toolPolicyForm,
   languagePreference,
   previewFileSizeLimitBytes,
-  codeFontSettings,
   networkSummary,
   bluetoothStatus,
   resolvedLocale,
@@ -233,7 +223,6 @@ export function SettingsModal({
   onToolPolicyFormChange,
   onLanguagePreferenceChange,
   onPreviewFileSizeLimitChange,
-  onCodeFontSettingsChange,
   onWifiStatus,
   onBluetoothStatus,
   onNetworkRefresh,
@@ -618,10 +607,8 @@ export function SettingsModal({
           {activeSection === "files" ? (
             <SettingsFilesPage
               previewFileSizeLimitBytes={previewFileSizeLimitBytes}
-              codeFontSettings={codeFontSettings}
               locale={resolvedLocale}
               onPreviewFileSizeLimitChange={onPreviewFileSizeLimitChange}
-              onCodeFontSettingsChange={onCodeFontSettingsChange}
             />
           ) : null}
 
@@ -981,34 +968,19 @@ function SettingsAppearancePage({
 
 function SettingsFilesPage({
   previewFileSizeLimitBytes,
-  codeFontSettings,
   locale,
-  onPreviewFileSizeLimitChange,
-  onCodeFontSettingsChange
+  onPreviewFileSizeLimitChange
 }: {
   previewFileSizeLimitBytes: number;
-  codeFontSettings: CodeFontSettings;
   locale: SupportedLocale;
   onPreviewFileSizeLimitChange: (bytes: number) => void;
-  onCodeFontSettingsChange: (settings: CodeFontSettings) => void;
 }) {
   const { t } = useTranslation();
   const previewFileSizeLimitMiB = previewFileSizeLimitBytesToMiB(previewFileSizeLimitBytes);
   const [draftLimitMiB, setDraftLimitMiB] = useState(String(previewFileSizeLimitMiB));
-  const [draftFontSizePx, setDraftFontSizePx] = useState(String(codeFontSettings.fontSizePx));
-  const codeFontOptions = CODE_FONT_OPTIONS.map((option) => ({
-    value: option.id,
-    label: option.label
-  }));
-  const selectedFontLabel =
-    codeFontOptions.find((option) => option.value === codeFontSettings.familyId)?.label ?? codeFontSettings.familyId;
   useEffect(() => {
     setDraftLimitMiB(String(previewFileSizeLimitMiB));
   }, [previewFileSizeLimitMiB]);
-
-  useEffect(() => {
-    setDraftFontSizePx(String(codeFontSettings.fontSizePx));
-  }, [codeFontSettings.fontSizePx]);
 
   function changeDraftLimit(value: string) {
     setDraftLimitMiB(value);
@@ -1018,73 +990,9 @@ function SettingsFilesPage({
     }
   }
 
-  function changeDraftFontSize(value: string) {
-    setDraftFontSizePx(value);
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed >= MIN_CODE_FONT_SIZE_PX && parsed <= MAX_CODE_FONT_SIZE_PX) {
-      onCodeFontSettingsChange({
-        ...codeFontSettings,
-        fontSizePx: clampCodeFontSizePx(parsed)
-      });
-    }
-  }
-
-  function commitDraftFontSize() {
-    onCodeFontSettingsChange({
-      ...codeFontSettings,
-      fontSizePx: clampCodeFontSizePx(Number(draftFontSizePx))
-    });
-  }
-
   return (
     <div className="settings-content-body">
       <div className="settings-page-grid">
-        <section className="settings-section-card">
-          <header>
-            <div>
-              <h3>{t("settings.files.editorTitle")}</h3>
-              <p>{t("settings.files.editorDescription")}</p>
-            </div>
-          </header>
-          <div className="settings-editor-font-grid">
-            <div className="settings-preference-field">
-              <HelpLabel label={t("settings.files.monoFont")} content={t("settings.files.monoFontHelp")} htmlFor="code-font-family" />
-              <CustomSelect
-                id="code-font-family"
-                value={codeFontSettings.familyId}
-                options={codeFontOptions}
-                ariaLabel={`${t("settings.files.monoFont")}: ${selectedFontLabel}`}
-                onChange={(familyId) =>
-                  onCodeFontSettingsChange({
-                    ...codeFontSettings,
-                    familyId
-                  })
-                }
-              />
-            </div>
-            <div className="settings-preference-field settings-size-field">
-              <HelpLabel label={t("settings.files.fontSize")} content={t("settings.files.fontSizeHelp")} htmlFor="code-font-size" helpId="code-font-size-help" />
-              <div className="settings-unit-input">
-                <input
-                  id="code-font-size"
-                  type="number"
-                  min="10"
-                  max="16"
-                  step="0.5"
-                  inputMode="decimal"
-                  value={draftFontSizePx}
-                  aria-describedby="code-font-size-help"
-                  onBlur={commitDraftFontSize}
-                  onChange={(event) => changeDraftFontSize(event.target.value)}
-                />
-                <span>{t("settings.files.pixels")}</span>
-              </div>
-            </div>
-          </div>
-          <pre className="settings-editor-sample" aria-hidden="true">
-            <code>{'const status: "ready" = "ready";'}</code>
-          </pre>
-        </section>
         <section className="settings-section-card">
           <header>
             <div>

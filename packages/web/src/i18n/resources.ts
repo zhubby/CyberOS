@@ -2476,7 +2476,7 @@ export const en = {
       },
       files: {
         title: "Files & Preview",
-        description: "Editor typography and preview size limits."
+        description: "File preview size limits."
       },
       indexer: {
         title: "Indexer",
@@ -3257,18 +3257,11 @@ export const en = {
       languageHelp: "System default follows your browser preference."
     },
     files: {
-      editorTitle: "Editor Typography",
-      editorDescription: "Code font used by text preview, code blocks, tables, and the live editor.",
-      monoFont: "Mono font",
-      monoFontHelp: "Choose an installed monospace face; each option falls back to a safe system mono stack.",
-      fontSize: "Font size",
-      fontSizeHelp: "Applies immediately in this browser.",
       previewTitle: "Preview Limits",
       previewDescription: "Control which files can open in the preview pane.",
       previewFileSizeLimit: "Max preview file size",
       previewFileSizeLimitHelp: "Non-video files above {{limit}} show metadata only; videos use media playback.",
-      megabytes: "MB",
-      pixels: "px"
+      megabytes: "MB"
     },
     photos: {
       libraryTitle: "Photo Library",
@@ -5889,7 +5882,7 @@ export const zhCN = {
       },
       files: {
         title: "文件与预览",
-        description: "编辑器字体和预览大小限制。"
+        description: "文件预览大小限制。"
       },
       indexer: {
         title: "索引服务",
@@ -6670,18 +6663,11 @@ export const zhCN = {
       languageHelp: "跟随系统会使用浏览器语言偏好。"
     },
     files: {
-      editorTitle: "编辑器字体",
-      editorDescription: "用于文本预览、代码块、表格和实时编辑器的代码字体。",
-      monoFont: "Mono 字体",
-      monoFontHelp: "选择已安装的等宽字体；每个选项都会回退到安全的系统等宽字体。",
-      fontSize: "字体大小",
-      fontSizeHelp: "在当前浏览器中立即生效。",
       previewTitle: "预览限制",
       previewDescription: "控制哪些文件可以在预览面板中打开。",
       previewFileSizeLimit: "最大预览文件大小",
       previewFileSizeLimitHelp: "超过 {{limit}} 的非视频文件只显示元数据；视频使用媒体播放。",
-      megabytes: "MB",
-      pixels: "px"
+      megabytes: "MB"
     },
     photos: {
       libraryTitle: "照片库",

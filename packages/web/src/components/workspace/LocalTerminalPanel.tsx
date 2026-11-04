@@ -23,7 +23,6 @@ import {
   type TerminalTab,
   type TerminalTabState
 } from "../../api.js";
-import type { CodeFontSettings } from "../../lib/editor-settings.js";
 import {
   shouldInitializeTerminalTabs,
   terminalTabLabel,
@@ -52,11 +51,9 @@ interface TerminalViewState {
 }
 
 export function LocalTerminalPanel({
-  active,
-  codeFontSettings
+  active
 }: {
   active: boolean;
-  codeFontSettings: CodeFontSettings;
 }) {
   const { t } = useTranslation();
   const requestVersionRef = useRef(0);
@@ -407,7 +404,6 @@ export function LocalTerminalPanel({
               tab={tab}
               label={terminalTabLabel(tab, t)}
               active={active && tab.id === tabState?.activeTabId}
-              codeFontSettings={codeFontSettings}
               connectionVersion={connectionVersions[tab.id] ?? 0}
               connectionError={String(t("workspace.terminal.connectionError"))}
               disconnectedError={String(t("workspace.terminal.disconnectedError"))}
@@ -583,7 +579,6 @@ function TerminalSessionView({
   tab,
   label,
   active,
-  codeFontSettings,
   connectionVersion,
   connectionError,
   disconnectedError,
@@ -592,7 +587,6 @@ function TerminalSessionView({
   tab: TerminalTab;
   label: string;
   active: boolean;
-  codeFontSettings: CodeFontSettings;
   connectionVersion: number;
   connectionError: string;
   disconnectedError: string;
@@ -669,7 +663,7 @@ function TerminalSessionView({
         terminal.focus();
       }, 0);
     }
-  }, [active, codeFontSettings.familyId, codeFontSettings.fontSizePx]);
+  }, [active]);
 
   useEffect(() => {
     if (!active) {

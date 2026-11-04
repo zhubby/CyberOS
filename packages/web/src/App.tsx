@@ -159,13 +159,6 @@ import {
 import { initialTranscriptState, transcriptReducer } from "./lib/transcript.js";
 import { ChatPaneSkeleton } from "./components/chat/ChatPaneSkeleton.js";
 import { workspaceAbsolutePath, workspaceParentPath } from "./lib/chat-paths.js";
-import {
-  codeFontFamilyValue,
-  normalizeCodeFontSettings,
-  readStoredCodeFontSettings,
-  writeStoredCodeFontSettings,
-  type CodeFontSettings
-} from "./lib/editor-settings.js";
 import { i18n } from "./i18n/index.js";
 import { toErrorMessage } from "./lib/format.js";
 import { MIN_CHAT_WIDTH, clampSplitWidth, readStoredSplitWidth, writeStoredSplitWidth } from "./lib/layout.js";
@@ -345,7 +338,6 @@ function AppContent() {
   const [previewFileSizeLimitBytes, setPreviewFileSizeLimitBytes] = useState(() =>
     readStoredPreviewFileSizeLimitBytes()
   );
-  const [codeFontSettings, setCodeFontSettings] = useState<CodeFontSettings>(() => readStoredCodeFontSettings());
   const [sessionEventCursor, setSessionEventCursor] = useState<{ sessionId: string; afterId: number } | null>(null);
   const eventSessionId = session?.id ?? null;
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -420,11 +412,9 @@ function AppContent() {
   const appStyle = useMemo(
     () =>
       ({
-        "--chat-pane-width": `${splitWidth}px`,
-        "--code-font-family": codeFontFamilyValue(codeFontSettings.familyId),
-        "--code-font-size": `${codeFontSettings.fontSizePx}px`
+        "--chat-pane-width": `${splitWidth}px`
       }) as CSSProperties,
-    [codeFontSettings.familyId, codeFontSettings.fontSizePx, splitWidth]
+    [splitWidth]
   );
 
   useEffect(() => {
@@ -2071,12 +2061,6 @@ function AppContent() {
     setPreviewFileSizeLimitBytes(nextLimit);
   }
 
-  function changeCodeFontSettings(nextSettings: CodeFontSettings) {
-    const normalized = normalizeCodeFontSettings(nextSettings);
-    writeStoredCodeFontSettings(normalized);
-    setCodeFontSettings(normalized);
-  }
-
   function handleEditorSaved(result: SaveEditableTextResult) {
     if (
       result.operation.metadata.storagePoolId &&
@@ -2755,7 +2739,6 @@ function AppContent() {
         vmOperations={vmOperations}
         operationsReady={operationsReady}
         locale={resolvedLocale}
-        codeFontSettings={codeFontSettings}
         filesPanelActivationId={filesPanelActivationId}
         onSelectStoragePool={selectStoragePool}
         onOpenDownloadedDirectory={openDownloadedDirectory}
@@ -2859,7 +2842,6 @@ function AppContent() {
           toolPolicyForm={toolPolicyForm}
           languagePreference={languagePreference}
           previewFileSizeLimitBytes={previewFileSizeLimitBytes}
-          codeFontSettings={codeFontSettings}
           networkSummary={settingsNetwork}
           bluetoothStatus={settingsBluetooth}
           resolvedLocale={resolvedLocale}
@@ -2887,7 +2869,6 @@ function AppContent() {
           onToolPolicyFormChange={setToolPolicyForm}
           onLanguagePreferenceChange={changeLanguagePreference}
           onPreviewFileSizeLimitChange={changePreviewFileSizeLimit}
-          onCodeFontSettingsChange={changeCodeFontSettings}
           onWifiStatus={handleSettingsWifiStatus}
           onBluetoothStatus={setSettingsBluetooth}
           onNetworkRefresh={refreshSettingsNetwork}

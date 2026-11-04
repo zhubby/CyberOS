@@ -1,6 +1,6 @@
 import type { ITheme, Terminal } from "@xterm/xterm";
 
-const FALLBACK_FONT_FAMILY = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace";
+const FALLBACK_FONT_FAMILY = "'Share Tech Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
 const FALLBACK_FONT_SIZE = 12;
 
 export function terminalOptions(element: HTMLElement): {

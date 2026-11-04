@@ -4,7 +4,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { FileMeta, VodPlayerStatus } from "../../api.js";
 import { isPathWithinStoragePool } from "../../App.js";
 import { i18n, initI18n } from "../../i18n/index.js";
-import { defaultCodeFontSettings } from "../../lib/editor-settings.js";
 import {
   defaultWorkspaceSearchOptions,
   hasWorkspaceSearchFilters,
@@ -123,7 +122,6 @@ function renderPreview(overrides: Partial<ComponentProps<typeof WorkspacePane>> 
     vmOperations: [],
     operationsReady: true,
     locale: "en",
-    codeFontSettings: defaultCodeFontSettings(),
     filesPanelActivationId: 0,
     onSelectStoragePool: vi.fn(),
     onOpenDownloadedDirectory: vi.fn(),
@@ -247,7 +245,6 @@ function filePaneProps(): ComponentProps<typeof WorkspacePane> {
     vmOperations: [],
     operationsReady: true,
     locale: "en",
-    codeFontSettings: defaultCodeFontSettings(),
     filesPanelActivationId: 0,
     onSelectStoragePool: noop,
     onOpenDownloadedDirectory: noop,
