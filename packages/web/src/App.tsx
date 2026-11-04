@@ -238,6 +238,7 @@ function AppContent() {
   const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null);
   const [storageSummaryLoading, setStorageSummaryLoading] = useState(true);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [initialSessionLoading, setInitialSessionLoading] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [transcriptState, dispatchTranscript] = useReducer(transcriptReducer, initialTranscriptState);
@@ -514,6 +515,8 @@ function AppContent() {
       dispatchTranscript({ type: "failed", sessionId: transcriptSessionId });
       setError(toErrorMessage(nextError));
       setStatus("error");
+    }).finally(() => {
+      if (active) setInitialSessionLoading(false);
     });
 
     return () => {
@@ -1397,6 +1400,10 @@ function AppContent() {
     let nextSession: Session | null = null;
     try {
       nextSession = await createSession(sessionWorkspacePath(selectedStoragePoolId, currentPath));
+      if (!isCurrentSessionViewRequest(sessionRequestId)) {
+        await reloadSessions();
+        return;
+      }
       activeSessionIdRef.current = nextSession.id;
       setCapabilityApprovals([]);
       commitActiveAgentJob(EMPTY_ACTIVE_AGENT_JOB);
@@ -2367,6 +2374,7 @@ function AppContent() {
     sessionViewRequestId.current += 1;
     setSessionEventCursor(null);
     setAgentToolActivities([]);
+    setRetryJobId(null);
     return sessionViewRequestId.current;
   }
 
@@ -2601,7 +2609,7 @@ function AppContent() {
         activeSessionId={activeSessionId}
         transcript={transcript}
         transcriptPhase={transcriptState.phase}
-        initialDataLoading={initialModelSettingsLoading}
+        initialDataLoading={initialSessionLoading || initialModelSettingsLoading}
         activeCapabilityApprovals={capabilityApprovals}
         agentToolActivities={agentToolActivities}
         message={message}

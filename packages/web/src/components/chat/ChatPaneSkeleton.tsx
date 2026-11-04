@@ -46,7 +46,7 @@ export function ChatPaneSkeleton({ active }: { active: boolean }) {
   );
 }
 
-function TranscriptSkeleton() {
+export function TranscriptSkeleton() {
   return (
     <div className="transcript-skeleton" aria-hidden="true">
       {["assistant", "user", "assistant", "user"].map((role, index) => (
