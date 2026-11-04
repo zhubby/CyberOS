@@ -108,6 +108,39 @@ test("command geometry, disabled, busy and keyboard focus agree across feature c
   }), ["2px", "rgb(0, 240, 255)", "3px"]);
 });
 
+test("management icon actions share quiet surfaces and target sizes inside modal portals", async t => {
+  for (const { tv, width, size } of [
+    { tv: false, width: 1440, size: 32 },
+    { tv: false, width: 390, size: 44 },
+    { tv: true, width: 1920, size: 44 }
+  ]) {
+    const page = await fixture(t, `
+      const action = (state, key) => React.createElement("button", {
+        key, className: "management-icon-action", "aria-label": key,
+        disabled: state !== "default", "aria-busy": state === "busy" || undefined,
+        "data-state": state
+      }, "×");
+      const states = ["default", "disabled", "busy"];
+      createRoot(document.getElementById("root")).render(React.createElement(React.Fragment, null,
+        React.createElement("div", { style: { padding: 24 } }, ...states.map(state => action(state, "workspace-" + state))),
+        React.createElement(ModalPortal, null,
+          React.createElement("section", { className: "management-modal docker-daemon-settings-dialog", role: "dialog", "aria-modal": true },
+            React.createElement("header", null, ...states.map(state => action(state, "modal-" + state)))))));
+    `, { tv, viewport: { width, height: 900 } });
+    for (const state of ["default", "disabled", "busy"]) {
+      const styles = await page.locator(`.management-icon-action[data-state="${state}"]`).evaluateAll(elements => elements.map(e => {
+        const s = globalThis.getComputedStyle(e), rect = e.getBoundingClientRect();
+        return { width: rect.width, height: rect.height, background: s.backgroundColor, color: s.color, border: s.borderTopColor, opacity: s.opacity };
+      }));
+      assert.deepEqual(styles[0], styles[1], `${tv ? "TV" : "Web"} ${width}px ${state}`);
+      assert.equal(styles[0].width, size);
+      assert.equal(styles[0].height, size);
+      assert.equal(styles[0].opacity, "1");
+      if (state === "default") assert.equal(styles[0].background, "rgba(0, 0, 0, 0)");
+    }
+  }
+});
+
 test("Web and TV share menu surfaces and states while retaining TV target size", async t => {
   const render = `createRoot(globalThis.document.getElementById("root")).render(React.createElement("div", { className: "workspace-search-field", style: { width: "min(320px, 100%)", padding: 24 } },
     React.createElement(CustomSelect, { value: "one", ariaLabel: "Library", onChange: () => undefined,

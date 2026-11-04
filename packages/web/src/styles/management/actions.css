@@ -16,21 +16,6 @@
   min-width: 0;
 }
 
-.management-icon-action {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 32px;
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 0;
-}
-
-.management-icon-action.is-danger {
-  color: var(--danger-text);
-}
-
 .docker-container-name-trigger {
   display: inline-flex;
   align-items: center;

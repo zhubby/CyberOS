@@ -199,7 +199,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 - `styles.css`、`workspace.css`、`settings.css`、`brand.css`、`hud-workspaces.css`、`responsive.css`、`chat.css`、`photos.css`、`monitoring-alerts.css` 与 `tv/tv.css` 是聚合入口，只维护导入顺序。基础映射在 `styles/foundation/`，共享控件在 `styles/components/`，业务规则归入文件、下载、网络、存储、Docker、VM、终端、聊天、照片等所属目录。响应式规则跟随所属模块；全局骨架响应规则位于 `foundation/responsive.css`。
 - 业务样式以 200–600 行为维护目标，单文件不得超过 800 行。不得为行数目标拆出编号片段；文件名表达职责。文件拆分首先保持声明和导入顺序，再通过计算样式及交互回归确认有意的统一调整。
 - 基础颜色以共享 `hud-tokens.css` 为准，Web/TV 共用 `foundation/tokens.css` 的完整组件映射。新增变量必须有定义或明确回退；仅动态数据值由组件设置。禁止使用未定义的 `--border`、`--panel`、`--focus-ring` 等局部别名。
-- 主、次、危险命令分别复用 `primary-button`、`secondary-button`、`danger-button`；轻量行内操作复用 `plain-button`。默认命令高 `34px`，显式 `button-compact` 为 `32px`，不得通过 `.某页面 button` 改变公共按钮尺寸、禁用透明度或忙碌颜色。移动触控至少 `44px`，TV 默认命令为 `48px`。
+- 主、次、危险命令分别复用 `primary-button`、`secondary-button`、`danger-button`；轻量行内操作复用 `plain-button`，图标操作沿用 `management-icon-action`，共享同一表面和状态，不依赖业务祖先。默认命令高 `34px`，显式 `button-compact` 为 `32px`，不得通过 `.某页面 button` 改变公共按钮尺寸、禁用透明度或忙碌颜色。移动触控至少 `44px`，TV 默认命令为 `48px`。
 - 所有 Web/TV 下拉框统一使用 `CustomSelect`，ESLint 检查全部 Web TSX。字段默认高 `40px`；紧凑字段通过 `className="control-compact"` 显式选择 `34px`，移动触控至少 `44px`；TV 字段和选项保持 `48px`。菜单统一深色抬升表面、黄色选中文字和红色状态轨，不能按页面重设配色。菜单挂到当前模态或应用浮层，以视口定位并随滚动更新，避免正文裁切；Escape 只关闭当前层。
 - 必填下拉使用 `required`，校验失败后聚焦可见触发器并展示关联错误；`triggerRef` 用于恢复焦点，`ariaBusy` 保留异步状态。业务负责字符串与数值之间的转换及其校验，不能通过伪造原生事件适配。
 - 音乐导航复用 `view-tabs` 外观，保留 `aria-current="page"` 的导航语义；页签使用 `aria-selected`。两者使用同一选中态。
