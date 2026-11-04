@@ -37,7 +37,7 @@
   border-color: var(--cyberos-color-border-emphasis);
 }
 
-.app-shell :where(input, textarea, .custom-select-trigger):focus-visible,
+.app-shell :where(input, textarea, .custom-select-trigger):focus-visible:not(:disabled),
 .custom-select.is-open .custom-select-trigger {
   border-color: var(--control-focus);
   box-shadow: inset 3px 0 0 var(--control-focus);
