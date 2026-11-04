@@ -2526,7 +2526,7 @@ export const en = {
       },
       downloads: {
         title: "Downloads",
-        description: "HTTP transfer settings. BitTorrent uses one independent download slot."
+        description: "HTTP and BitTorrent concurrency and the default download directory."
       }
     },
     media: {
@@ -5955,7 +5955,7 @@ export const zhCN = {
       },
       downloads: {
         title: "下载",
-        description: "HTTP 传输设置；BT 使用一个独立下载槽。"
+        description: "设置 HTTP、BT 下载并发数及默认下载目录。"
       }
     },
     media: {
