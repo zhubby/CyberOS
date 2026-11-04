@@ -1,0 +1,36 @@
+.management-modal-backdrop {
+  padding: 18px;
+}
+
+.management-modal-backdrop.docker-image-modal-backdrop {
+  z-index: 90;
+}
+
+.management-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(860px, 100%);
+  max-height: min(720px, 90vh);
+  overflow: hidden;
+}
+
+.management-modal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.management-modal header > div {
+  min-width: 0;
+}
+
+.management-modal h2 {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

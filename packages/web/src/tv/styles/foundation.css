@@ -1,0 +1,97 @@
+:root {
+  --control-height: 48px;
+  --control-compact-height: 44px;
+  --field-height: 48px;
+  --select-option-height: 48px;
+  --tooltip-font-size: 16px;
+  --tooltip-max-width: 420px;
+  color-scheme: dark;
+  font-family: var(--cyberos-font-ui);
+  --tv-bg: var(--cyberos-color-canvas);
+  --tv-surface: var(--cyberos-color-surface-raised);
+  --tv-surface-strong: var(--cyberos-color-surface-strong);
+  --tv-text: var(--cyberos-color-text);
+  --tv-muted: var(--cyberos-color-text-muted);
+  --tv-dim: var(--cyberos-color-text-dim);
+  --tv-line: var(--cyberos-color-border);
+  --tv-line-emphasis: var(--cyberos-color-border-emphasis);
+  --tv-command: var(--cyberos-color-command);
+  --tv-focus: var(--cyberos-color-focus);
+  --tv-danger: var(--cyberos-color-danger);
+  --tv-accent: var(--tv-command);
+  --tv-accent-contrast: var(--cyberos-hud-void);
+  --tv-poster-width: clamp(176px, 12.5vw, 252px);
+  background: var(--tv-bg);
+  color: var(--tv-text);
+}
+
+* {
+  box-sizing: border-box;
+  letter-spacing: 0;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--tv-bg);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], input[type="button"], input[type="submit"], input[type="reset"]),
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::before,
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::after {
+  border-radius: 0 !important;
+}
+
+:where(button, input, select, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], [tabindex]):focus-visible {
+  outline: 3px solid var(--tv-focus);
+  outline-offset: 4px;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.tv-app {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    linear-gradient(115deg, rgb(255 0 60 / 5%), transparent 40%),
+    var(--cyberos-hud-grid),
+    var(--tv-bg);
+  background-size: auto, 32px 32px, auto;
+  animation: tv-panel-reveal var(--cyberos-hud-duration-reveal) var(--cyberos-hud-easing) both;
+}
+
+.tv-backdrop,
+.tv-detail-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 72vh;
+  object-fit: cover;
+  opacity: 0.3;
+}

@@ -1,139 +1,8 @@
-@import "@cyberos/shared/hud-tokens.css";
-
-:root {
-  color-scheme: dark;
-  font-family: var(--cyberos-font-ui);
-  --font-ui: var(--cyberos-font-ui);
-  --font-display: var(--cyberos-font-ui);
-  --font-emphasis: var(--font-display);
-  --font-mono: var(--cyberos-font-mono);
-  --cyber-yellow: var(--cyberos-hud-yellow);
-  --cyber-yellow-dim: #d9cc00;
-  --cyber-ink: var(--cyberos-hud-void);
-  --cyber-red: var(--cyberos-hud-red);
-  --cyber-cyan: var(--cyberos-hud-cyan);
-  --cyber-white: var(--cyberos-hud-text);
-  --app-bg: var(--cyberos-color-canvas);
-  --server-bg: var(--cyberos-color-canvas);
-  --channel-bg: var(--cyberos-color-surface);
-  --chat-bg: var(--cyberos-color-surface);
-  --surface: var(--cyberos-color-surface-raised);
-  --surface-hover: var(--cyberos-color-surface-hover);
-  --surface-strong: var(--cyberos-color-surface-strong);
-  --line: var(--cyberos-color-border);
-  --line-soft: var(--cyberos-hud-line-soft);
-  --text: var(--cyberos-color-text);
-  --muted: var(--cyberos-color-text-muted);
-  --muted-2: var(--cyberos-color-text-dim);
-  --accent: var(--cyberos-color-command);
-  --accent-hover: #fff342;
-  --accent-contrast: var(--cyberos-hud-void);
-  --green: var(--cyberos-color-success);
-  --yellow: var(--cyberos-color-warning);
-  --red: var(--cyberos-color-danger);
-  --red-hover: #ff335f;
-  --success-contrast: var(--cyberos-hud-void);
-  --danger-contrast: var(--cyberos-hud-void);
-  --shadow: var(--cyberos-panel-shadow);
-  --body-gradient: var(--cyberos-hud-grid);
-  --header-border: var(--cyberos-color-border-emphasis);
-  --rail-border: var(--cyberos-color-danger);
-  --split-handle-surface: var(--cyberos-color-canvas);
-  --split-handle-surface-hover: var(--cyberos-color-surface-hover);
-  --split-handle-line: color-mix(in srgb, var(--cyberos-color-command) 25%, transparent);
-  --split-handle-thumb: color-mix(in srgb, var(--cyberos-color-command) 65%, transparent);
-  --split-handle-thumb-hover: var(--cyberos-color-command);
-  --split-handle-thumb-border: var(--cyberos-color-canvas);
-  --split-handle-thumb-shadow: transparent;
-  --modal-backdrop: var(--cyberos-hud-overlay);
-  --editor-backdrop: rgb(5 10 14 / 92%);
-  --modal-bg: var(--cyberos-color-surface-raised);
-  --dialog-bg: var(--cyberos-color-surface-raised);
-  --footer-bg: var(--cyberos-color-surface-raised);
-  --input-deep-bg: var(--cyberos-color-canvas);
-  --input-bg: var(--cyberos-color-surface);
-  --preview-bg: var(--cyberos-color-canvas);
-  --preview-toolbar-bg: var(--cyberos-color-surface-raised);
-  --row-head-bg: var(--cyberos-color-canvas);
-  --table-head-bg: var(--cyberos-color-canvas);
-  --code-bg: var(--cyberos-color-canvas);
-  --code-text: var(--cyberos-color-command);
-  --preview-text: var(--cyberos-color-text);
-  --message-text: var(--cyberos-color-text);
-  --subtle-bg: rgb(244 236 231 / 4%);
-  --subtle-bg-strong: rgb(244 236 231 / 8%);
-  --subtle-bg-inverse: rgb(244 236 231 / 6%);
-  --subtle-border-inverse: var(--cyberos-color-border);
-  --skeleton-base: color-mix(in srgb, var(--text) 14%, var(--surface));
-  --skeleton-highlight: color-mix(in srgb, var(--text) 28%, var(--surface));
-  --table-border: var(--cyberos-color-border);
-  --hover-wash: var(--cyberos-hud-cyan-wash);
-  --control-overlay: rgb(244 236 231 / 8%);
-  --code-inline-bg: var(--cyberos-color-canvas);
-  --code-block-bg: var(--cyberos-color-canvas);
-  --approval-bg: var(--cyberos-color-surface-raised);
-  --approval-bg-hover: var(--cyberos-color-surface-hover);
-  --approval-gradient: linear-gradient(var(--cyberos-color-surface-raised), var(--cyberos-color-surface-raised));
-  --approval-gradient-hover: linear-gradient(var(--cyberos-color-surface-hover), var(--cyberos-color-surface-hover));
-  --approval-border-hover: var(--cyberos-color-command);
-  --accent-soft-text: var(--cyberos-color-command);
-  --accent-soft-bg: var(--cyberos-hud-yellow-wash);
-  --teal-text: var(--cyberos-color-connected);
-  --teal-bg: var(--cyberos-hud-cyan-wash);
-  --success-text: var(--cyberos-color-success);
-  --success-bg: rgb(99 214 154 / 12%);
-  --success-border: var(--cyberos-color-success);
-  --warning-text: var(--cyberos-color-warning);
-  --warning-bg: rgb(255 200 87 / 12%);
-  --warning-border: var(--cyberos-color-warning);
-  --danger-text: #ff6b87;
-  --danger-strong-text: var(--cyberos-color-danger);
-  --danger-ui-text: #ff6b87;
-  --danger-bg: var(--cyberos-hud-red-wash);
-  --danger-bg-soft: rgb(255 0 60 / 9%);
-  --danger-soft: rgb(255 0 60 / 12%);
-  --danger-border: var(--cyberos-color-danger);
-  --danger-border-hover: #ff335f;
-  --neutral-status-text: var(--cyberos-color-text-muted);
-  --neutral-status-bg: rgb(244 236 231 / 6%);
-  --link: var(--cyberos-color-focus);
-  --selection-bg: rgb(0 240 255 / 38%);
-  --focus-ring-soft: var(--cyberos-color-focus);
-  --focus-ring-inset: rgb(0 240 255 / 55%);
-  --control-accent-active: #d9cc00;
-  --control-danger-active: #d60033;
-  --control-hover-shadow: 3px 3px 0 rgb(0 240 255 / 38%);
-  --control-active-shadow: inset 3px 0 0 var(--cyberos-color-focus);
-  --control-disabled-bg: var(--cyberos-color-surface-strong);
-  --control-disabled-border: var(--cyberos-color-border);
-  --control-disabled-text: var(--cyberos-color-text-dim);
-  --control-busy-bg: var(--cyberos-color-surface-strong);
-  --control-busy-text: var(--cyberos-color-command);
-  --control-focus: var(--cyberos-color-focus);
-  --control-duration: var(--cyberos-hud-duration-state);
-  --control-easing: var(--cyberos-hud-easing);
-  --alert-danger-text: #ff6b87;
-  --alert-danger-bg: rgb(255 0 60 / 14%);
-  --alert-danger-border: var(--cyberos-color-danger);
-  --syntax-comment: #8d946d;
-  --syntax-keyword: #ff527b;
-  --syntax-number: var(--cyber-yellow);
-  --syntax-string: var(--cyber-cyan);
-  --syntax-title: #f5f7e8;
-  --syntax-type: #47f7ff;
-  --syntax-tag: #ff527b;
-  --syntax-regexp: #78ffba;
-  --syntax-symbol: var(--cyber-yellow);
-  --syntax-meta: #f5f7e8;
-  --syntax-deletion: #ff527b;
-  --syntax-addition: #78ffba;
-  --code-font-family: var(--font-mono);
-  --code-font-size: 12px;
-  --panel-cut: polygon(0 0, calc(100% - var(--cyberos-hud-cut-lg)) 0, 100% var(--cyberos-hud-cut-lg), 100% 100%, var(--cyberos-hud-cut-lg) 100%, 0 calc(100% - var(--cyberos-hud-cut-lg)));
-  --control-cut: polygon(0 0, calc(100% - var(--cyberos-hud-cut-sm)) 0, 100% var(--cyberos-hud-cut-sm), 100% 100%, var(--cyberos-hud-cut-sm) 100%, 0 calc(100% - var(--cyberos-hud-cut-sm)));
-  background: var(--app-bg);
-  color: var(--text);
-}
+@import "./foundation/tokens.css";
+@import "./components/buttons.css";
+@import "./components/forms.css";
+@import "./components/tabs.css";
+@import "./components/feedback.css";
 
 * {
   box-sizing: border-box;
@@ -175,39 +44,10 @@ button {
   border: 0;
 }
 
-.view-tabs {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.view-tabs > button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  min-height: 38px;
-  padding: 7px 10px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  color: var(--muted-2);
-  background: transparent;
-  font-family: var(--font-ui);
-}
-
-.view-tabs > button[aria-selected="true"] {
-  border-bottom-color: var(--accent);
-  color: var(--text);
-  background: var(--accent-soft-bg);
-}
-
 .view-tab-badge {
   min-width: 19px;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: 0;
   color: var(--muted);
   background: var(--surface);
   font-size: 10px;
@@ -343,78 +183,10 @@ button {
 
 .empty-state,
 .preview-empty {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
   min-height: 220px;
-  padding: 24px;
-  color: var(--muted);
-  text-align: center;
 }
 
 .empty-state strong,
 .preview-empty strong {
   color: var(--text);
-}
-
-.primary-button,
-.secondary-button,
-.danger-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 86px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 0;
-  color: var(--accent-contrast);
-  font-family: var(--font-emphasis);
-  font-weight: 800;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
-}
-
-.primary-button {
-  background: var(--accent);
-}
-
-.primary-button:hover:not(:disabled) {
-  background: var(--accent-hover);
-  box-shadow: var(--control-hover-shadow);
-}
-
-.primary-button:active:not(:disabled) {
-  background: var(--control-accent-active);
-  box-shadow: var(--control-active-shadow);
-}
-
-.secondary-button {
-  color: var(--text);
-  background: var(--surface);
-}
-
-.secondary-button:hover:not(:disabled) {
-  background: var(--surface-hover);
-  box-shadow: var(--control-hover-shadow);
-}
-
-.secondary-button:active:not(:disabled) {
-  background: var(--surface-strong);
-  box-shadow: var(--control-active-shadow);
-}
-
-.danger-button {
-  color: var(--danger-contrast);
-  background: var(--red);
-}
-
-.danger-button:hover:not(:disabled) {
-  background: var(--red-hover);
-  box-shadow: var(--control-hover-shadow);
-}
-
-.danger-button:active:not(:disabled) {
-  background: var(--control-danger-active);
-  box-shadow: var(--control-active-shadow);
 }

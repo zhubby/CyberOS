@@ -1,0 +1,340 @@
+.docker-compose-app-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.docker-compose-app-heading > div {
+  min-width: 0;
+}
+
+.docker-compose-app-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+}
+
+.docker-compose-app-body,
+.docker-compose-delete-confirmation {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 18px;
+  background: var(--footer-bg);
+}
+
+.docker-compose-app-body {
+  display: grid;
+  align-content: start;
+  gap: 13px;
+}
+
+.docker-compose-app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 220px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.docker-compose-app-meta-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  gap: 10px;
+}
+
+.docker-compose-app-meta-grid label,
+.docker-compose-editor-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.docker-compose-app-meta-grid label > span,
+.docker-compose-editor-field > span {
+  color: var(--muted-2);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.docker-compose-app-meta-grid input,
+.docker-compose-editor-field textarea,
+.docker-compose-environment-row input,
+.docker-compose-environment-row textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  outline: none;
+  color: var(--text);
+  background: var(--subtle-bg);
+  font: inherit;
+  font-size: 12px;
+}
+
+.docker-compose-app-meta-grid input,
+.docker-compose-environment-row input,
+.docker-compose-environment-row textarea {
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.docker-compose-environment-row textarea {
+  padding-block: 8px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.docker-compose-app-meta-grid input:focus,
+.docker-compose-editor-field textarea:focus,
+.docker-compose-environment-row input:focus,
+.docker-compose-environment-row textarea:focus {
+  border-color: var(--accent-soft-text);
+  box-shadow: 0 0 0 2px var(--focus-ring-soft);
+}
+
+.docker-compose-app-meta-grid input:read-only,
+.docker-compose-app-meta-grid input:disabled {
+  color: var(--muted);
+  background: var(--channel-bg);
+}
+
+.docker-compose-app-path {
+  grid-column: 1 / -1;
+}
+
+.docker-compose-app-path input,
+.docker-compose-editor-field textarea {
+  font-family: var(--code-font-family);
+}
+
+.docker-compose-editor-field textarea {
+  min-height: 250px;
+  padding: 11px 12px;
+  resize: vertical;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.docker-compose-environment {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--channel-bg);
+}
+
+.docker-compose-environment > div:first-child {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.docker-compose-environment h3,
+.docker-compose-environment p {
+  margin: 0;
+}
+
+.docker-compose-environment h3 {
+  font-size: 12.5px;
+}
+
+.docker-compose-environment p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.docker-compose-environment > div:first-child > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+  font: inherit;
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.docker-compose-environment-list {
+  display: grid;
+  gap: 7px;
+}
+
+.docker-compose-environment-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.65fr) minmax(180px, 1fr) auto 28px;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.docker-compose-environment-row > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--success-text);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.docker-compose-environment-empty {
+  padding: 4px 0;
+}
+
+.docker-compose-validation,
+.docker-compose-app-error,
+.docker-compose-app-notice {
+  border: 1px solid var(--success-border);
+  border-radius: 5px;
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.docker-compose-validation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 9px 10px;
+}
+
+.docker-compose-validation[data-risk="high"] {
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.docker-compose-validation > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.docker-compose-validation strong,
+.docker-compose-validation span,
+.docker-compose-validation small {
+  overflow-wrap: anywhere;
+}
+
+.docker-compose-validation strong {
+  color: var(--text);
+  font-size: 11.5px;
+}
+
+.docker-compose-validation span,
+.docker-compose-validation small {
+  font-size: 10.5px;
+}
+
+.docker-compose-app-error,
+.docker-compose-app-notice {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.docker-compose-app-error {
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.docker-compose-delete-confirmation {
+  display: grid;
+  align-content: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.docker-compose-delete-confirmation > svg {
+  color: var(--warning-text);
+}
+
+.docker-compose-delete-confirmation h3,
+.docker-compose-delete-confirmation p {
+  margin: 0;
+}
+
+.docker-compose-delete-confirmation h3 {
+  font-size: 17px;
+}
+
+.docker-compose-delete-confirmation p {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.docker-compose-delete-confirmation dl,
+.docker-compose-delete-confirmation > .docker-compose-app-error {
+  grid-column: 1 / -1;
+}
+
+.docker-compose-delete-confirmation dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.docker-compose-delete-confirmation dl > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--channel-bg);
+}
+
+.docker-compose-delete-confirmation dt {
+  color: var(--muted-2);
+  font-size: 10px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.docker-compose-delete-confirmation dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 11.5px;
+}
+
+.docker-compose-app-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--channel-bg);
+}
+
+.docker-compose-app-footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}

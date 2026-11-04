@@ -1,0 +1,131 @@
+.agent-notification-button {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.agent-notification-button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 2px solid var(--server-bg);
+  border-radius: 9px;
+  color: white;
+  background: var(--red);
+  font-size: 9px;
+  font-family: var(--font-emphasis);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.agent-status-indicator {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 18px;
+  border-radius: 5px;
+  background: transparent;
+}
+
+.agent-status-indicator > span {
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--server-bg);
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 0 2px rgb(240 178 50 / 18%);
+}
+
+.agent-status-indicator[data-state="ready"] > span {
+  background: var(--green);
+  box-shadow: 0 0 0 2px rgb(35 165 89 / 18%);
+}
+
+.agent-status-indicator[data-state="error"] > span,
+.agent-status-indicator[data-state="offline"] > span {
+  background: var(--red);
+  box-shadow: 0 0 0 2px rgb(218 55 60 / 18%);
+}
+
+.chat-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--chat-bg);
+}
+
+.chat-main > * {
+  min-width: 0;
+}
+
+.chat-header {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 64px;
+  padding: 12px 18px;
+}
+
+.chat-header > div {
+  min-width: 0;
+}
+
+.chat-header-copy {
+  display: flex;
+  align-items: center;
+  height: 32px;
+}
+
+.chat-header .chat-header-copy h2 {
+  line-height: 24px;
+}
+
+.eyebrow {
+  display: block;
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chat-delete-session-button {
+  flex: 0 0 auto;
+  color: #ff9da1;
+  background: rgb(218 55 60 / 10%);
+}
+
+.chat-delete-session-button:hover:not(:disabled) {
+  color: white;
+  border-color: rgb(218 55 60 / 42%);
+  background: var(--red);
+}
+
+.session-delete-backdrop {
+  padding: 18px;
+  backdrop-filter: blur(8px);
+}

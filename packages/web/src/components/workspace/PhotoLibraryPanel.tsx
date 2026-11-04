@@ -815,7 +815,7 @@ export function PhotoLibraryPanel({
                 ] as CustomSelectOption<PhotoQuerySortField>[]}
                 onChange={updateSortField}
                 ariaLabel={t("workspace.photos.sort")}
-                className="photo-sort-select"
+                className="control-compact photo-sort-select"
               />
               <button type="button" onClick={reverseSortDirection} data-tooltip={t("workspace.photos.sortDirection")} aria-label={t("workspace.photos.sortDirection")}>
                 {sortDirection === "asc" ? "↑" : "↓"}

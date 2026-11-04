@@ -1,0 +1,12 @@
+@media (prefers-reduced-motion: reduce) {
+  .photo-open img,
+  .photo-name,
+  .photo-query-panel-skeleton,
+  .photo-timeline-skeleton,
+  .photo-timeline-skeleton .photo-day {
+    animation: none;
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
+}

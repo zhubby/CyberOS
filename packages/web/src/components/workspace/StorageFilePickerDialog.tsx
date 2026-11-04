@@ -355,7 +355,7 @@ export function StorageFilePickerDialog({
       >
         <header className="storage-file-picker-header">
           <div className="storage-file-picker-heading">
-            <span className="vm-create-icon" aria-hidden="true">{mode === "directory" ? <FolderOpen size={20} /> : mode === "files" ? <File size={20} /> : <Disc3 size={20} />}</span>
+            <span className="create-form-icon" aria-hidden="true">{mode === "directory" ? <FolderOpen size={20} /> : mode === "files" ? <File size={20} /> : <Disc3 size={20} />}</span>
             <div>
               <span className="eyebrow">
                 {mode === "directory"
@@ -533,7 +533,7 @@ export function StorageFilePickerDialog({
                         {isDirectory ? <Folder aria-hidden="true" size={17} /> : mode === "files" || mode === "skill-zip" ? <File aria-hidden="true" size={17} /> : <Disc3 aria-hidden="true" size={17} />}
                       </span>
                       <span className="storage-file-picker-file-name">{entry.name}</span>
-                      <span className="storage-file-picker-file-meta">
+                      <span className="storage-file-picker-file-meta metadata">
                         {isDirectory
                           ? mode === "directory"
                             ? t("workspace.downloads.directoryPickerFolder")
@@ -560,10 +560,10 @@ export function StorageFilePickerDialog({
               : selection?.name ?? fileCopy.none}</span>
           )}
           <div>
-            <button type="button" onClick={onCancel}>{t("common.actions.cancel")}</button>
+            <button type="button" onClick={onCancel} className="secondary-button">{t("common.actions.cancel")}</button>
             <button
               type="button"
-              className="vm-create-submit"
+              className="primary-button create-form-submit"
               onClick={confirmSelection}
               disabled={!selectedPool || loading || Boolean(error) || currentDirectoryDisabled || (mode === "files" ? multiSelection.length === 0 : mode !== "directory" && !selection)}
               data-tooltip={currentDirectoryDisabled ? directorySelectionDisabledReason : undefined}

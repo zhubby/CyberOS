@@ -1,0 +1,219 @@
+.settings-device-page {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.settings-device-page > .system-wifi-section {
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.bluetooth-settings-card,
+.bluetooth-devices-card,
+.bluetooth-output-card,
+.bluetooth-inbox-card,
+.bluetooth-transfers-card,
+.bluetooth-challenge {
+  min-width: 0;
+}
+
+.bluetooth-settings-card > header,
+.bluetooth-devices-card > header,
+.bluetooth-output-card > header,
+.bluetooth-inbox-card > header,
+.bluetooth-transfers-card > header {
+  align-items: center;
+}
+
+.settings-device-toggle,
+.bluetooth-devices-card > header > button,
+.bluetooth-transfers-card > header > button,
+.bluetooth-discovery-toolbar > button,
+.bluetooth-inbox-controls > button,
+.bluetooth-device-actions > button:not(.management-icon-action),
+.settings-inline-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface-strong);
+}
+
+.bluetooth-field-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.45fr) minmax(180px, 1fr);
+  align-items: center;
+  gap: 7px 14px;
+  min-width: 0;
+}
+
+.bluetooth-field-row > span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.bluetooth-field-row small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.bluetooth-inbox-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(240px, 1fr);
+  align-items: stretch;
+  gap: 10px;
+}
+
+.bluetooth-inbox-controls > button {
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.bluetooth-inbox-controls > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bluetooth-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: rgb(0 0 0 / 10%);
+}
+
+.bluetooth-switch-row .hud-switch-copy,
+.bluetooth-switch-row strong,
+.bluetooth-switch-row small {
+  display: block;
+  min-width: 0;
+}
+
+.bluetooth-switch-row strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.bluetooth-switch-row small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.bluetooth-transfer-list {
+  display: grid;
+}
+
+.bluetooth-transfer-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.bluetooth-transfer-row:last-child {
+  border-bottom: 0;
+}
+
+.bluetooth-transfer-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--accent);
+  background: var(--surface-strong);
+}
+
+.bluetooth-transfer-copy,
+.bluetooth-transfer-copy strong,
+.bluetooth-transfer-copy small {
+  display: block;
+  min-width: 0;
+}
+
+.bluetooth-transfer-copy strong,
+.bluetooth-transfer-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bluetooth-transfer-copy strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.bluetooth-transfer-copy small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.bluetooth-transfer-progress {
+  display: block;
+  height: 3px;
+  margin-top: 7px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line-soft);
+}
+
+.bluetooth-transfer-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.bluetooth-transfer-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--danger-text);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.settings-device-unavailable,
+.settings-device-disabled {
+  margin: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 5px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.settings-device-unavailable {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.settings-device-unavailable p,
+.settings-device-disabled {
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.settings-device-unavailable p {
+  margin: 0;
+}

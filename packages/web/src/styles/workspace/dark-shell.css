@@ -1,0 +1,83 @@
+.agent-list,
+.settings-rail,
+.workspace-panel-rail {
+  color: var(--text);
+  background:
+    linear-gradient(180deg, rgb(255 0 60 / 6%), transparent 28%),
+    var(--cyber-ink);
+}
+
+.agent-list,
+.settings-rail {
+  border-right-color: var(--cyber-red);
+}
+
+.brand,
+.workspace-header,
+.panel-header,
+.management-header,
+.settings-content-header,
+.notification-drawer-header,
+.preview-toolbar,
+.editor-header,
+.editor-footer {
+  border-color: var(--cyberos-hud-line);
+  color: var(--text);
+  background:
+    linear-gradient(90deg, rgb(255 0 60 / 8%), transparent 46%),
+    var(--surface);
+}
+
+.brand-banner,
+.brand-banner-wordmark {
+  color: var(--cyber-yellow);
+}
+
+.agent-list-head,
+.dock-title,
+.settings-nav h3 {
+  color: var(--muted-2);
+}
+
+.agent-list-head button,
+.settings-button,
+.agent-notification-button,
+.agent-power-button,
+.agent-list .icon-button,
+.workspace-header .icon-button,
+.settings-content-header button,
+.notification-drawer-actions button {
+  border-color: var(--line);
+  color: var(--muted);
+  background: rgb(244 236 231 / 3%);
+}
+
+.agent-list-head button:hover,
+.settings-button:hover,
+.agent-notification-button:hover,
+.agent-power-button:hover,
+.agent-list .icon-button:hover,
+.workspace-header .icon-button:hover:not(:disabled),
+.settings-content-header button:hover,
+.notification-drawer-actions button:hover:not(:disabled) {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-ink);
+  background: var(--cyber-cyan);
+}
+
+.workspace-pane,
+.workspace-stage,
+.management-body,
+.settings-content,
+.photo-library {
+  color: var(--text);
+  background:
+    linear-gradient(120deg, rgb(255 0 60 / 3%), transparent 40%),
+    var(--cyberos-hud-grid),
+    var(--channel-bg);
+  background-size: auto, 28px 28px, auto;
+}
+
+.workspace-panel-tab.is-active {
+  border-left-color: var(--cyber-red);
+}

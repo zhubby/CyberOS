@@ -1,3 +1,4 @@
+import { CustomSelect } from "../common/CustomSelect.js";
 import { PlaybackSlider } from "./PlaybackSlider.js";
 import { PlaybackTargetSelect } from "./PlaybackTargetSelect.js";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -167,11 +168,11 @@ function BrowserPlayerSurface() {
           <button
             onClick={() => p.setPlayerOpen(false)}
             aria-label={t("video.minimize")}
-            data-tooltip={t("video.minimize")}
+            data-tooltip={t("video.minimize")} className="plain-button"
           >
             <Minimize2 size={20} />
           </button>
-          <button onClick={p.stopBrowser} aria-label={t("video.stop")} data-tooltip={t("video.stop")}>
+          <button onClick={p.stopBrowser} aria-label={t("video.stop")} data-tooltip={t("video.stop")} className="plain-button">
             <Square size={18} />
           </button>
         </header>
@@ -209,7 +210,7 @@ function BrowserPlayerSurface() {
             disabled={b.session.state !== "ready"}
             onClick={toggle}
             aria-label={b.playing ? t("music.pause") : t("music.play")}
-            data-tooltip={b.playing ? t("music.pause") : t("music.play")}
+            data-tooltip={b.playing ? t("music.pause") : t("music.play")} className="plain-button"
           >
             {b.playing ? <Pause size={20} /> : <Play size={20} />}
           </button>
@@ -226,7 +227,7 @@ function BrowserPlayerSurface() {
             onClick={() => p.updateBrowser({ muted: !b.muted })}
             aria-label={t("playback.mute")}
             data-tooltip={t("playback.mute")}
-            aria-pressed={b.muted}
+            aria-pressed={b.muted} className="plain-button"
           >
             <Volume2 size={18} />
           </button>
@@ -251,7 +252,7 @@ function BrowserPlayerSurface() {
                   .catch(() => setError(t("video.streamUnsupported")));
             }}
             aria-label={t("video.fullscreen")}
-            data-tooltip={t("video.fullscreen")}
+            data-tooltip={t("video.fullscreen")} className="plain-button"
           >
             <Maximize size={18} />
           </button>
@@ -259,60 +260,39 @@ function BrowserPlayerSurface() {
         <div className="browser-options">
           <label>
             {t("video.quality")}
-            <select
+            <CustomSelect
               value={b.options.quality ?? "original"}
-              onChange={(e) =>
-                replace({
-                  quality: e.target.value as NonNullable<
+              onChange={(selectedValue) => replace({
+                  quality: selectedValue as NonNullable<
                     StreamOptions["quality"]
                   >,
-                })
-              }
-            >
-              {["original", "1080", "720", "480"].map((q) => (
-                <option key={q} value={q}>
-                  {q === "original" ? t("video.original") : `${q}p`}
-                </option>
-              ))}
-            </select>
+                })}
+              ariaLabel={t("video.quality")}
+              options={["original", "1080", "720", "480"].map((q) => ({ value: q, label: q === "original" ? t("video.original") : `${q}p` }))}
+            />
           </label>
           <label>
             {t("video.audio")}
-            <select
-              value={b.session.audioTrack ?? ""}
-              onChange={(e) => replace({ audioTrack: Number(e.target.value) })}
-            >
-              {b.session.tracks
-                .filter((track) => track.type === "audio")
-                .map((track) => (
-                  <option key={track.index} value={track.index}>
-                    {track.title ?? track.language ?? track.codec} ·{" "}
-                    {track.index}
-                  </option>
-                ))}
-            </select>
+            <CustomSelect
+              value={String(b.session.audioTrack ?? "")}
+              onChange={(selectedValue) => replace({ audioTrack: Number(selectedValue) })}
+              ariaLabel={t("video.audio")}
+              options={b.session.tracks
+                .filter((track) => track.type === "audio").map((track) => ({ value: String(track.index), label: `${track.title ?? track.language ?? track.codec} ·${" "}${track.index}` }))}
+            />
           </label>
           <label>
             {t("video.subtitles")}
-            <select
-              value={b.session.subtitleTrack ?? "off"}
-              onChange={(e) =>
-                replace({
+            <CustomSelect
+              value={String(b.session.subtitleTrack ?? "off")}
+              onChange={(selectedValue) => replace({
                   subtitleTrack:
-                    e.target.value === "off" ? null : Number(e.target.value),
-                })
-              }
-            >
-              <option value="off">{t("video.off")}</option>
-              {b.session.tracks
-                .filter((track) => track.type === "subtitle")
-                .map((track) => (
-                  <option key={track.index} value={track.index}>
-                    {track.title ?? track.language ?? track.codec} ·{" "}
-                    {track.index}
-                  </option>
-                ))}
-            </select>
+                    selectedValue === "off" ? null : Number(selectedValue),
+                })}
+              ariaLabel={t("video.subtitles")}
+              options={[{ value: "off", label: t("video.off") }, ...(b.session.tracks
+                .filter((track) => track.type === "subtitle").map((track) => ({ value: String(track.index), label: `${track.title ?? track.language ?? track.codec} ·${" "}${track.index}` })))]}
+            />
           </label>
           <span>
             {b.session.mode === "direct"

@@ -1,0 +1,137 @@
+.photo-map-progress {
+  width: 100%;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--line-soft);
+}
+
+.photo-map-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 180ms ease-out;
+}
+
+.photo-index-progress {
+  margin: 0;
+  padding: 7px 12px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+.photo-selection-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.photo-selection-actions > span {
+  flex: 0 0 auto;
+  padding-right: 3px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.photo-selection-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 10.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.photo-selection-actions button:last-child {
+  width: 32px;
+  padding: 0;
+}
+
+.photo-selection-actions button.is-danger {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.photo-library-content {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.photo-query-panel-skeleton,
+.photo-timeline-skeleton {
+  pointer-events: none;
+  animation: management-skeleton-enter 280ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.photo-query-toolbar-skeleton .management-skeleton-block {
+  height: 31px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+}
+
+.photo-query-toolbar-skeleton .photo-skeleton-search {
+  flex: 1 1 260px;
+  min-width: 160px;
+}
+
+.photo-skeleton-view { width: 122px; }
+.photo-skeleton-sort { width: 128px; }
+.photo-skeleton-advanced { width: 78px; }
+
+.photo-query-summary-skeleton .management-skeleton-block {
+  height: 8px;
+}
+
+.photo-timeline-skeleton .photo-day {
+  animation: management-skeleton-row-enter 320ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.photo-timeline-skeleton .photo-day:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.photo-timeline-skeleton .photo-day > header .management-skeleton-block {
+  height: 11px;
+}
+
+.photo-skeleton-tile {
+  display: inline-block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  margin: 0 0 6px;
+  break-inside: avoid;
+  border-radius: 5px;
+}
+
+.photo-skeleton-tile:nth-child(3n + 1) { aspect-ratio: 4 / 5; }
+.photo-skeleton-tile:nth-child(3n + 2) { aspect-ratio: 3 / 2; }
+
+.photo-library-empty .primary-button,
+.photo-library-empty .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}

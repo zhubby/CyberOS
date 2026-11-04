@@ -1,0 +1,46 @@
+/* CyberOS industrial HUD integration layer. Feature stylesheets continue to own layout. */
+
+html {
+  font-family: var(--font-ui);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}
+
+::selection {
+  color: var(--cyber-ink);
+  background: var(--selection-bg);
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+:where(strong, b) {
+  font-family: var(--font-emphasis);
+  font-weight: 700;
+}
+
+:where(code, pre, kbd, samp) :where(strong, b),
+:where(code, pre, kbd, samp):is(strong, b) {
+  font-family: inherit;
+}
+
+/* Button geometry must also cover portals mounted outside the app shell. */
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"], input[type="button"], input[type="submit"], input[type="reset"]),
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::before,
+:where(button, [role="button"], [role="tab"], [role="menuitem"], [role="switch"])::after,
+.app-shell :where(input, select, textarea, [role="dialog"], [role="menu"], [role="listbox"]) {
+  border-radius: 0 !important;
+}

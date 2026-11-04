@@ -1,0 +1,223 @@
+.settings-form label,
+.settings-section-card label:not(.hud-switch) {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.settings-form label:not(.hud-switch) > span,
+.settings-section-card label:not(.hud-switch) > span {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.settings-form input:not(.hud-switch-input),
+.settings-section-card input:not(.hud-switch-input) {
+  width: 100%;
+  height: 40px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.settings-form input::placeholder,
+.settings-section-card input::placeholder {
+  color: var(--muted-2);
+}
+
+.settings-form textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface);
+  resize: vertical;
+}
+
+.settings-form textarea::placeholder {
+  color: var(--muted-2);
+}
+
+.settings-textarea {
+  min-height: 88px;
+}
+
+.settings-preference-field {
+  display: grid;
+  gap: 7px;
+  max-width: none;
+  min-width: 0;
+}
+
+.settings-size-field {
+  max-width: none;
+}
+
+.settings-preference-field > span,
+.settings-preference-field > label {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.settings-unit-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.settings-unit-input:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-unit-input input {
+  width: 100%;
+  height: 40px;
+  border: 0;
+  padding: 0 10px;
+  color: var(--text);
+  background: transparent;
+}
+
+.settings-unit-input input:focus-visible {
+  outline: 0;
+}
+
+.settings-unit-input > span {
+  padding: 0 10px;
+  color: var(--muted-2);
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.settings-preference-field small {
+  color: var(--muted-2);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.settings-check {
+  display: flex !important;
+  align-items: center;
+  gap: 9px !important;
+  width: fit-content;
+  color: var(--muted);
+}
+
+.settings-check input {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-empty-note {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.settings-icon-button:hover:not(:disabled),
+.settings-icon-button:focus-visible {
+  color: var(--text);
+  border-color: rgb(255 255 255 / 13%);
+  background: var(--surface-hover);
+}
+
+.settings-secret-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.settings-secret-input {
+  position: relative;
+  min-width: 0;
+}
+
+.settings-secret-input > input[type="password"] {
+  padding-right: 46px;
+}
+
+.settings-secret-input > .settings-secret-action {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-secret-input[data-clear-pending] > input {
+  border-color: var(--danger-border);
+}
+
+.settings-secret-input[data-clear-pending] > input::placeholder {
+  color: var(--danger-text);
+}
+
+.settings-docker-runtime-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-docker-runtime-grid .settings-field-wide {
+  grid-column: 1 / -1;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 66px;
+  padding: 14px 30px;
+  border-top: 1px solid var(--line-soft);
+  background: #20222c;
+}
+
+.settings-actions > span {
+  min-width: 0;
+  color: var(--muted-2);
+  font-size: 12.5px;
+}
+
+.settings-actions > span:empty {
+  display: none;
+}
+
+.settings-actions > div {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}

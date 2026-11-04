@@ -4,13 +4,30 @@
   min-width: 0;
 }
 
+/* Participate in native form validation without adding a second tab stop. */
+.custom-select-validation {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.custom-select.is-invalid .custom-select-trigger {
+  border-color: var(--cyberos-color-danger);
+}
+
 .custom-select-trigger {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 16px;
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 40px;
+  height: var(--field-height);
   border: 1px solid var(--line-soft);
   border-radius: 0;
   padding: 0 10px;
@@ -22,6 +39,18 @@
     background 140ms ease,
     border-color 140ms ease,
     color 140ms ease;
+}
+
+.custom-select.control-compact .custom-select-trigger {
+  height: var(--control-height);
+  font-size: 12px;
+}
+
+@media (max-width: 1040px), (pointer: coarse) {
+  .custom-select-trigger,
+  .custom-select.control-compact .custom-select-trigger {
+    min-height: 44px;
+  }
 }
 
 .custom-select-trigger:hover:not(:disabled),
@@ -76,8 +105,8 @@
   border: 1px solid var(--line);
   border-radius: 0;
   padding: 6px;
-  background: #20222c;
-  box-shadow: var(--shadow);
+  background: var(--cyberos-color-surface-raised);
+  box-shadow: var(--cyberos-panel-shadow);
 }
 
 .custom-select-option {
@@ -85,10 +114,11 @@
   grid-template-columns: minmax(0, 1fr) 14px;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: var(--select-option-height, 32px);
   border-radius: 0;
   padding: 0 8px;
-  color: var(--muted);
+  border-left: 3px solid transparent;
+  color: var(--cyberos-color-text-muted);
   cursor: pointer;
   transition:
     background 120ms ease,
@@ -97,14 +127,16 @@
 
 .custom-select-option.is-active,
 .custom-select-option:hover {
-  color: var(--text);
-  background: var(--surface-hover);
+  color: var(--cyberos-color-focus);
+  background: var(--cyberos-color-surface-hover);
 }
 
 .custom-select-option.is-selected {
-  color: var(--text);
-  font-family: var(--font-emphasis);
-  font-weight: 800;
+  border-left-color: var(--cyberos-color-danger);
+  color: var(--cyberos-color-command);
+  background: var(--cyberos-hud-yellow-wash);
+  font-family: var(--cyberos-font-ui);
+  font-weight: 700;
 }
 
 .custom-select-option.is-disabled {

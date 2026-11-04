@@ -1,0 +1,69 @@
+@media (max-width: 1040px) {
+
+  .download-task-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .download-task-actions {
+    width: auto;
+    justify-content: flex-start;
+  }
+}@media (max-width: 560px) {
+
+  .downloads-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .downloads-filters {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .downloads-toolbar-meta {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .download-header-stat {
+    min-width: 50px;
+    padding: 0 6px;
+  }
+
+  .download-target-control {
+    grid-template-columns: 1fr;
+  }
+
+  .download-source-input-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .download-resolve-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .download-create-dialog-footer {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+  }
+
+  .download-create-dialog-footer button {
+    min-width: 0;
+  }
+
+  .download-create-dialog-heading {
+    gap: 8px;
+  }
+
+  .download-create-dialog-header p {
+    max-width: none;
+  }
+
+  .torrent-file-selector-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+}

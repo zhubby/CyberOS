@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { readStylesheet } from "../../styles/test-utils.js";
 
 async function sourceFiles(directory: URL): Promise<URL[]> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -42,14 +43,14 @@ describe("shared HUD tooltip coverage", () => {
       readFile(new URL("../../main.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../tv/main.tsx", import.meta.url), "utf8"),
       readFile(new URL("../../styles.css", import.meta.url), "utf8"),
-      readFile(new URL("../../tv/tv.css", import.meta.url), "utf8"),
+      readStylesheet(new URL("../../tv/tv.css", import.meta.url)),
       readFile(new URL("../../../../../docs/src/components/Head.astro", import.meta.url), "utf8"),
       readFile(new URL("../../../../../docs/src/styles/custom.css", import.meta.url), "utf8")
     ]);
     expect(web).toContain("<TooltipLayer />");
     expect(tv).toContain("<TooltipLayer />");
     expect(webStyles).toContain('"./styles/tooltip.css"');
-    expect(tvStyles).toContain('"../styles/tooltip.css"');
+    expect(tvStyles).toContain(".hud-tooltip");
     expect(docs).toContain("mountTooltipLayer();");
     expect(docsStyles).toContain('"../../../packages/web/src/styles/tooltip.css"');
   });

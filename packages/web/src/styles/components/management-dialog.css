@@ -1,0 +1,29 @@
+.management-dialog-backdrop {
+  padding: 20px;
+}
+
+.management-dialog {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.management-dialog header,
+.management-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.management-dialog label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.management-dialog .custom-select {
+  min-width: 0;
+}

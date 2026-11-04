@@ -1,3 +1,4 @@
+import { CustomSelect } from "../common/CustomSelect.js";
 import { ModalPortal } from "../common/ModalPortal.js";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
@@ -938,35 +939,27 @@ export function SystemStorageManagementPanel({
                 </label>
                 <label>
                   <span>{t("workspace.management.storage.fields.raid")}</span>
-                  <select
+                  <CustomSelect
                     value={form.raidLevel}
                     disabled={submitting}
-                    onChange={(event) => {
-                      setForm((current) => ({ ...current, raidLevel: event.target.value as StorageRaidLevel }));
+                    onChange={(selectedValue) => {
+                      setForm((current) => ({ ...current, raidLevel: selectedValue as StorageRaidLevel }));
                     }}
-                  >
-                    {STORAGE_RAID_LEVELS.map((level) => (
-                      <option key={level} value={level}>
-                        RAID {level} ({t("workspace.management.storage.raidMinimum", { count: raidMinimum(level) })})
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel={t("workspace.management.storage.fields.raid")}
+                    options={STORAGE_RAID_LEVELS.map((level) => ({ value: level, label: `RAID ${level} (${t("workspace.management.storage.raidMinimum", { count: raidMinimum(level) })})` }))}
+                  />
                 </label>
                 <label>
                   <span>{t("workspace.management.storage.fields.filesystem")}</span>
-                  <select
+                  <CustomSelect
                     value={form.filesystem}
                     disabled={submitting}
-                    onChange={(event) => {
-                      setForm((current) => ({ ...current, filesystem: event.target.value as StorageFilesystem }));
+                    onChange={(selectedValue) => {
+                      setForm((current) => ({ ...current, filesystem: selectedValue as StorageFilesystem }));
                     }}
-                  >
-                    {STORAGE_FILESYSTEMS.map((filesystem) => (
-                      <option key={filesystem} value={filesystem}>
-                        {t(`workspace.management.storage.filesystems.${filesystem}`)}
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel={t("workspace.management.storage.fields.filesystem")}
+                    options={STORAGE_FILESYSTEMS.map((filesystem) => ({ value: filesystem, label: t(`workspace.management.storage.filesystems.${filesystem}`) }))}
+                  />
                 </label>
               </div>
 
@@ -1050,10 +1043,10 @@ export function SystemStorageManagementPanel({
               ) : null}
 
               <footer className="storage-pool-form-actions">
-                <button type="button" onClick={closeCreateModal} disabled={submitting}>
+                <button type="button" onClick={closeCreateModal} disabled={submitting} className="secondary-button">
                   {t("common.actions.cancel")}
                 </button>
-                <button type="submit" className="is-primary" disabled={submitting || !confirmed} aria-busy={submitting || undefined}>
+                <button type="submit" className="primary-button" disabled={submitting || !confirmed} aria-busy={submitting || undefined}>
                   {submitting ? (
                     <LoaderCircle className="storage-pool-spinner" aria-hidden="true" size={15} />
                   ) : (
@@ -1682,12 +1675,12 @@ function NetworkTrafficMonitor({
         </div>
         <label className="network-traffic-interface-select">
           <span>{t("workspace.management.network.traffic.interface")}</span>
-          <select value={selectedInterfaceId} onChange={(event) => setSelectedInterfaceId(event.target.value)}>
-            <option value="all">{t("workspace.management.network.traffic.allInterfaces")}</option>
-            {selectableInterfaces.map((networkInterface) => (
-              <option key={networkInterface.id} value={networkInterface.id}>{networkInterface.name}</option>
-            ))}
-          </select>
+          <CustomSelect
+            value={selectedInterfaceId}
+            onChange={(selectedValue) => setSelectedInterfaceId(selectedValue)}
+            ariaLabel={t("workspace.management.network.traffic.interface")}
+            options={[{ value: "all", label: t("workspace.management.network.traffic.allInterfaces") }, ...(selectableInterfaces.map((networkInterface) => ({ value: networkInterface.id, label: networkInterface.name })))]}
+          />
         </label>
       </header>
 

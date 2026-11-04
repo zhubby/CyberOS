@@ -1,0 +1,17 @@
+@media (max-width: 560px) {
+
+  .workspace-terminal-header {
+    gap: 6px;
+    padding: 0 8px;
+  }
+
+  .workspace-terminal-tab {
+    min-width: 82px;
+    max-width: 132px;
+    padding: 0 9px;
+  }
+
+  .workspace-terminal-actions {
+    gap: 4px;
+  }
+}

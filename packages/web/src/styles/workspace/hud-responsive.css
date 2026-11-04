@@ -1,0 +1,185 @@
+.chat-pane :where(button, textarea, a):focus-visible,
+.workspace-stage[data-panel="files"] :where(button, input, select, [tabindex="0"]):focus-visible,
+.workspace-panel-rail button:focus-visible,
+.mobile-tabs button:focus-visible {
+  outline: 2px solid var(--control-focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1040px) {
+  .chat-pane.is-mobile-active {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
+  .agent-list {
+    padding-inline: 5px;
+  }
+
+  .agent-list-head button,
+  .agent-notification-button,
+  .agent-settings-button,
+  .agent-power-button,
+  .session-item {
+    width: 44px;
+  }
+
+  .workspace-shell {
+    grid-template-columns: minmax(0, 1fr) 52px;
+  }
+
+  .workspace-panel-rail {
+    padding-inline: 4px;
+  }
+
+  .workspace-panel-tab {
+    width: 42px;
+    min-height: 46px;
+  }
+
+  .files-navigation-bar,
+  .files-navigation-bar.has-storage-pool-switcher,
+  .files-navigation-bar.has-batch-selection,
+  .files-navigation-bar.has-storage-pool-switcher.has-batch-selection {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-stage[data-panel="files"] .file-browser {
+    height: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .mobile-tabs {
+    padding: 7px 8px;
+  }
+
+  .mobile-tab-buttons {
+    gap: 0;
+  }
+
+  .mobile-tab-buttons button {
+    min-height: 40px;
+  }
+
+  .chat-header {
+    grid-template-columns: 36px minmax(0, 1fr) 34px;
+    gap: 8px;
+    min-height: 64px;
+    padding-inline: 10px;
+  }
+
+  .chat-header-index {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+
+  .chat-header .chat-header-copy h2 {
+    font-size: 18px;
+  }
+
+  .message {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 9px;
+    padding-right: 4px;
+  }
+
+  .message .avatar {
+    width: 27px;
+    height: 27px;
+  }
+
+  .message > div:last-child,
+  .message-user > div:last-child {
+    padding-left: 9px;
+  }
+
+  .composer {
+    margin: 0 8px 9px;
+    padding: 10px;
+    box-shadow: 4px 4px 0 rgb(255 51 95 / 28%);
+  }
+
+  .files-header-actions {
+    width: 70px;
+    max-width: 70px;
+    overflow-x: auto;
+  }
+
+  .files-navigation-bar {
+    padding: 9px 10px 11px;
+  }
+
+  .workspace-stage[data-panel="files"] .workspace-grid {
+    padding: 10px 10px 14px;
+  }
+
+  .workspace-stage[data-panel="files"] .workspace-empty-state {
+    width: calc(100% - 20px);
+    min-height: 200px;
+    padding: 24px 14px;
+  }
+}
+
+@media (max-width: 360px) {
+  .chat-pane.is-mobile-active {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .agent-list-head button,
+  .agent-notification-button,
+  .agent-settings-button,
+  .agent-power-button,
+  .session-item {
+    width: 40px;
+  }
+
+  .chat-header {
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    gap: 5px;
+    padding-inline: 7px;
+  }
+
+  .chat-header-index {
+    width: 31px;
+    height: 31px;
+  }
+
+  .chat-header .chat-header-copy h2 {
+    font-size: 16px;
+  }
+
+  .workspace-shell {
+    grid-template-columns: minmax(0, 1fr) 48px;
+  }
+
+  .workspace-panel-tab {
+    width: 38px;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-main::after,
+  .workspace-stage[data-panel="files"]::after,
+  .chat-pane,
+  .chat-main,
+  .workspace-pane,
+  .session-item.is-active,
+  .workspace-panel-tab.is-active {
+    animation: none;
+  }
+
+  .mobile-tab-buttons button,
+  .session-item,
+  .workspace-panel-tab {
+    transition: none;
+  }
+}
+
+@media (max-height: 600px) {
+  .workspace-stage[data-panel="files"] {
+    grid-template-rows: auto auto minmax(220px, 1fr);
+    overflow-y: auto;
+  }
+}

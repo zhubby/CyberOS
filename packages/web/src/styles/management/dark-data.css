@@ -1,0 +1,50 @@
+.management-table,
+.management-data-table,
+.monitoring-alert-table,
+.file-table {
+  color: var(--text);
+  background: transparent;
+}
+
+.management-table th,
+.management-data-table th,
+.monitoring-alert-table th,
+.file-row-head {
+  border-color: var(--cyberos-hud-line);
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.management-table td,
+.management-data-table td,
+.monitoring-alert-table td,
+.file-row {
+  border-color: var(--line);
+}
+
+.management-table tbody tr:hover,
+.management-data-table tbody tr:hover,
+.monitoring-alert-table tbody tr:hover {
+  background: var(--cyberos-hud-cyan-wash);
+  box-shadow: inset 3px 0 0 var(--cyber-cyan);
+}
+
+.editor-status,
+.preview-kind,
+.risk-pill,
+.settings-area-list em {
+  border: 1px solid currentColor;
+  color: var(--muted);
+  background: rgb(244 236 231 / 4%);
+  font-family: var(--font-mono);
+}
+
+.editor-status[data-state="saved"] {
+  color: var(--success-text);
+}
+
+.editor-status[data-state="error"] {
+  color: var(--danger-text);
+}

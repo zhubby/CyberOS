@@ -1,0 +1,87 @@
+.settings-form {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-page-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.settings-page-grid > .settings-section-card {
+  grid-column: 1 / -1;
+}
+
+.settings-downloads-grid,
+.settings-indexer-grid,
+.settings-docker-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-indexer-grid .settings-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-indexer-storage-pools {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-indexer-storage-pool {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-indexer-storage-pool:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.settings-indexer-storage-pool > span,
+.settings-indexer-storage-pool strong,
+.settings-indexer-storage-pool small {
+  display: block;
+  min-width: 0;
+}
+
+.settings-indexer-storage-pool strong,
+.settings-indexer-storage-pool small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-indexer-storage-pool strong {
+  font-size: 12.5px;
+}
+
+.settings-indexer-storage-pool small {
+  margin-top: 3px;
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.settings-indexer-ocr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.settings-indexer-rebuild {
+  min-width: 96px;
+}

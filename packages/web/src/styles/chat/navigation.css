@@ -1,0 +1,163 @@
+.chat-pane {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background: var(--chat-bg);
+}
+
+.agent-list {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 8px 10px;
+  background: var(--server-bg);
+  border-right: 1px solid rgb(0 0 0 / 24%);
+}
+
+.brand {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 48px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.agent-brand-logo {
+  display: block;
+  width: 36px;
+  height: 36px;
+  filter: drop-shadow(0 7px 14px rgb(88 101 242 / 18%));
+  transition:
+    filter 140ms ease,
+    transform 140ms ease;
+}
+
+.brand:hover .agent-brand-logo {
+  filter: drop-shadow(0 8px 16px rgb(33 214 194 / 22%));
+  transform: translateY(-1px);
+}
+
+.agent-list-head {
+  justify-content: center;
+  padding: 10px 0 8px;
+}
+
+.agent-list-head button {
+  width: 40px;
+  height: 40px;
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.session-list {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 4px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 0 10px;
+}
+
+.session-item {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.session-item:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.session-item.is-active {
+  border-color: rgb(142 161 255 / 28%);
+  color: var(--accent-soft-text);
+  background: var(--accent-soft-bg);
+  box-shadow: none;
+}
+
+.session-item svg {
+  color: inherit;
+}
+
+.session-approval-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border: 1px solid var(--channel-bg);
+  border-radius: 7px;
+  color: var(--accent-contrast);
+  background: var(--yellow);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.agent-footer {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settings-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 0;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.agent-settings-button {
+  width: 40px;
+  height: 40px;
+}
+
+.agent-power-button {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--danger-ui-text);
+  background: var(--danger-bg-soft);
+}
+
+.power-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 62%);
+}

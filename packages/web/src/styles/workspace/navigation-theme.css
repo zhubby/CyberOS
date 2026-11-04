@@ -1,0 +1,128 @@
+/* App frame and navigation rails */
+
+.agent-list,
+.settings-rail {
+  border-right: 2px solid var(--cyber-red);
+}
+
+.brand {
+  border-bottom: 1px solid rgb(252 238 10 / 48%);
+}
+
+.agent-brand-logo,
+.settings-brand-logo,
+.brand-banner-mark {
+  width: 38px;
+  height: 38px;
+  filter: invert(1);
+}
+
+.brand-banner-wordmark {
+  font-size: 29px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.agent-list-head,
+.dock-title,
+.settings-nav h3 {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.agent-list-head::before,
+.dock-title::before {
+  color: var(--cyber-red);
+  content: "//";
+}
+
+.agent-list-head button,
+.settings-button,
+.agent-notification-button,
+.agent-power-button,
+.agent-list .icon-button {
+  border: 1px solid rgb(252 238 10 / 48%);
+}
+
+.agent-list-head button:hover,
+.settings-button:hover,
+.agent-notification-button:hover,
+.agent-power-button:hover,
+.agent-list .icon-button:hover:not(:disabled) {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-ink);
+  background: var(--cyber-cyan);
+  box-shadow: 2px 2px 0 var(--cyber-red);
+}
+
+.session-list {
+  counter-reset: cyber-session;
+}
+
+.session-item {
+  position: relative;
+  border: 1px solid transparent;
+  background: transparent;
+  counter-increment: cyber-session;
+}
+
+.session-item::after {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font: 600 8px/1 var(--font-mono);
+  content: counter(cyber-session, decimal-leading-zero);
+}
+
+.session-item.is-active::after {
+  color: var(--cyber-red);
+}
+
+.agent-status,
+.agent-list :where(small, time) {
+  color: rgb(252 238 10 / 58%);
+}
+
+.mobile-tabs {
+  border-bottom: 2px solid var(--cyber-red);
+}
+
+.mobile-tab-buttons {
+  border: 1px solid rgb(252 238 10 / 50%);
+}
+
+.split-handle {
+  border: 0;
+  background-color: var(--split-handle-surface);
+}
+
+.split-handle::after {
+  width: 4px;
+  height: 32px;
+  border: 0;
+  background: var(--split-handle-thumb);
+  box-shadow: none;
+}
+
+.split-handle:hover,
+.split-handle:focus-visible {
+  --split-handle-line: color-mix(in srgb, var(--cyberos-color-command) 40%, transparent);
+  background-color: var(--split-handle-surface);
+}
+
+.app-shell .split-handle:focus-visible {
+  outline-color: var(--cyberos-color-command);
+  box-shadow: 0 0 0 1px var(--cyber-ink), 0 0 0 3px var(--cyberos-color-command);
+}
+
+.app-shell.is-resizing .split-handle {
+  --split-handle-line: color-mix(in srgb, var(--cyberos-color-command) 60%, transparent);
+  background-color: var(--split-handle-surface-hover);
+}
+
+.app-shell.is-resizing .split-handle::after {
+  background: var(--split-handle-thumb-hover);
+  opacity: 1;
+}

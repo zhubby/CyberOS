@@ -1,0 +1,236 @@
+.file-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  opacity: 0;
+  overflow: visible;
+  padding-right: 16px;
+  pointer-events: none;
+  translate: 6px 0;
+  transition: opacity 140ms ease, translate 140ms ease;
+  white-space: normal;
+}
+
+.file-row:not(.file-row-head):hover .file-row-actions,
+.file-row:not(.file-row-head):focus-visible .file-row-actions,
+.file-row:focus-within .file-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+  translate: 0;
+}
+
+.file-row-expanded-actions {
+  display: contents;
+}
+
+.file-action-button.file-action-button-more {
+  display: none;
+}
+
+.file-action-button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-soft);
+  border-radius: 0;
+  color: var(--muted);
+  background: rgb(255 255 255 / 4%);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.file-action-button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgb(255 255 255 / 14%);
+  background: var(--surface-hover);
+}
+
+.file-action-button-send {
+  color: var(--accent-soft-text);
+  border-color: rgb(88 101 242 / 24%);
+  background: var(--accent-soft-bg);
+}
+
+.file-action-button-send:hover:not(:disabled) {
+  color: white;
+  border-color: rgb(142 161 255 / 52%);
+  background: var(--accent);
+}
+
+.file-action-button.is-danger {
+  color: #ff9da1;
+  background: rgb(218 55 60 / 12%);
+}
+
+.file-action-button.is-danger:hover:not(:disabled) {
+  color: white;
+  border-color: rgb(218 55 60 / 45%);
+  background: var(--red);
+}
+
+.file-row-action-menu {
+  position: fixed;
+  z-index: 88;
+  display: grid;
+  width: 190px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--modal-bg);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 34%);
+  animation: file-action-menu-in 140ms ease-out both;
+}
+
+.file-row-action-menu button {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  text-align: left;
+}
+
+.file-row-action-menu button:hover,
+.file-row-action-menu button:focus-visible {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.file-row-action-menu button.is-danger {
+  color: var(--danger-text);
+}
+
+.file-row-action-menu button.is-danger:hover,
+.file-row-action-menu button.is-danger:focus-visible {
+  color: white;
+  background: var(--red);
+}
+
+@keyframes file-action-menu-in {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+.file-action-backdrop {
+  padding: 18px;
+  backdrop-filter: blur(8px);
+}
+
+.file-action-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(420px, 100%);
+  padding: 16px;
+}
+
+.transfer-dialog {
+  width: min(480px, 100%);
+}
+
+.file-transfer-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--muted-2);
+  background: var(--surface);
+  font-size: 11.5px;
+}
+
+.file-transfer-route > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-transfer-route svg {
+  color: var(--accent);
+}
+
+.file-transfer-route strong {
+  color: var(--text);
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.file-action-dialog header {
+  display: grid;
+  gap: 4px;
+}
+
+.file-action-dialog h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-action-field {
+  display: grid;
+  gap: 7px;
+}
+
+.file-action-field span,
+.file-action-hint {
+  color: var(--muted-2);
+  font-size: 11.5px;
+}
+
+.file-action-field span {
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.file-action-field input {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.file-action-hint,
+.file-action-copy {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.file-action-error {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.file-action-copy {
+  color: #dbdee1;
+}
+
+.file-action-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

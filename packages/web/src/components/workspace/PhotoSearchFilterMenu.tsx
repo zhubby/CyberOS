@@ -152,7 +152,7 @@ export function PhotoSearchFilterMenu({
                 ]}
                 onChange={(value) => updateFilter("rating", value ? { min: Number(value) } : undefined)}
                 ariaLabel={t("workspace.photos.rating")}
-                className="photo-filter-select"
+                className="control-compact photo-filter-select"
               />
             </label>
             <label className="photo-location-filter">
@@ -187,14 +187,14 @@ export function PhotoSearchFilterMenu({
             {(draft.advanced?.conditions ?? []).map((condition, index) => (
               <div className="photo-condition-row" key={`${index}:${condition.key}`}>
                 <CustomSelect
-                  className="photo-condition-field"
+                  className="control-compact photo-condition-field"
                   value={condition.key}
                   options={metadataFields.map((field) => ({ value: field.key, label: `${field.key} (${field.count})` }))}
                   onChange={(value) => updateAdvancedCondition(index, { key: value })}
                   ariaLabel={t("workspace.photos.metadataField")}
                 />
                 <CustomSelect
-                  className="photo-condition-operator"
+                  className="control-compact photo-condition-operator"
                   value={condition.operator}
                   options={metadataOperatorOptions(t)}
                   onChange={(value) => updateAdvancedCondition(index, { operator: value })}
@@ -259,7 +259,7 @@ function PhotoFacetSelect({
         selectedValues={selected}
         placeholder={summary}
         ariaLabel={`${label}: ${summary}`}
-        className="photo-filter-select"
+        className="control-compact photo-filter-select"
         options={[
           ...(selected.length ? [{ value: "__clear__", label: allLabel }] : []),
           ...options.map((item) => ({ value: item.value, label: `${item.value} (${item.count})` }))

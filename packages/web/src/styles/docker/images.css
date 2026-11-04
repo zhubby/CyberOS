@@ -1,0 +1,203 @@
+.docker-image-section {
+  grid-column: 1 / -1;
+  container: docker-images / inline-size;
+}
+
+.docker-image-section-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.docker-image-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) max-content max-content;
+  align-items: center;
+  justify-content: end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.docker-image-search {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  width: min(240px, 100%);
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted-2);
+  background: var(--subtle-bg);
+}
+
+.docker-image-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft-bg);
+}
+
+.docker-image-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+}
+
+@container docker-images (max-width: 760px) {
+  .docker-image-section-header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .docker-image-toolbar {
+    grid-template-columns: minmax(160px, 1fr) max-content max-content;
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .docker-image-search {
+    width: 100%;
+  }
+}
+
+@container docker-images (max-width: 560px) {
+  .docker-image-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .docker-image-search {
+    grid-column: 1 / -1;
+  }
+
+  .docker-image-toolbar button {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.docker-image-table {
+  min-width: 880px;
+}
+
+.docker-image-table th:nth-child(1),
+.docker-image-table td:nth-child(1) {
+  width: 34%;
+}
+
+.docker-image-table th:nth-child(2),
+.docker-image-table td:nth-child(2) {
+  width: 12%;
+}
+
+.docker-image-table th:nth-child(3),
+.docker-image-table td:nth-child(3) {
+  width: 18%;
+}
+
+.docker-image-table th:nth-child(4),
+.docker-image-table td:nth-child(4),
+.docker-image-table th:nth-child(5),
+.docker-image-table td:nth-child(5),
+.docker-image-table th:nth-child(6),
+.docker-image-table td:nth-child(6) {
+  width: 12%;
+}
+
+.docker-image-table td:first-child small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+.docker-image-table code {
+  font-family: var(--code-font-family);
+  font-size: 10.5px;
+}
+
+.docker-image-name-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-align: left;
+}
+
+.docker-image-name-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docker-image-name-trigger svg {
+  flex: 0 0 auto;
+  color: var(--accent-soft-text);
+  opacity: 0;
+  transform: translate(-2px, 2px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.docker-image-name-trigger:hover svg,
+.docker-image-name-trigger:focus-visible svg {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+.docker-image-engine-note,
+.docker-image-error,
+.docker-registry-password-note,
+.docker-registry-storage-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--warning-border);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.docker-image-error {
+  border: 1px solid var(--danger-border);
+  border-radius: 5px;
+  color: var(--danger-text);
+  background: var(--danger-bg);
+}
+
+.docker-image-detail-dialog,
+.docker-image-pull-dialog,
+.docker-registry-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(760px, calc(100dvh - 36px));
+  border-top: 3px solid var(--accent);
+}
+
+.docker-image-detail-dialog {
+  width: min(760px, 100%);
+}
+
+.docker-image-detail-dialog > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+}
+
+.docker-image-pull-dialog {
+  width: min(560px, 100%);
+}

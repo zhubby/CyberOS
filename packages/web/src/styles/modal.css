@@ -4,3 +4,60 @@
   display: grid;
   place-items: center;
 }
+
+.management-dialog-backdrop,
+.management-modal-backdrop,
+.music-dialog-backdrop,
+.file-action-backdrop,
+.session-delete-backdrop,
+.settings-backdrop {
+  padding: 20px;
+  background: var(--modal-backdrop);
+}
+
+:where(.management-dialog, .management-modal, .music-dialog, .session-delete-dialog, .file-action-dialog, .settings-modal, .file-preview-dialog, .preview-dialog, .storage-file-picker) {
+  min-width: 0;
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  border: 1px solid var(--cyberos-color-border-emphasis);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--dialog-bg);
+  box-shadow: var(--cyberos-panel-shadow);
+}
+
+:where(.management-dialog, .music-dialog, .session-delete-dialog, .file-action-dialog) {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.management-modal,
+.settings-modal {
+  overflow: hidden;
+}
+
+:where(.management-modal, .management-dialog, .music-dialog) :where(.dialog-body) {
+  min-height: 0;
+  overflow: auto;
+}
+
+.dialog-actions,
+:where(.management-dialog, .music-dialog, .session-delete-dialog, .file-action-dialog) > footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 620px) {
+  .management-dialog-backdrop,
+  .management-modal-backdrop,
+  .music-dialog-backdrop,
+  .file-action-backdrop,
+  .session-delete-backdrop,
+  .settings-backdrop {
+    padding: 10px;
+  }
+}

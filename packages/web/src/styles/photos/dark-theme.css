@@ -1,0 +1,56 @@
+.photo-library,
+.photo-query-panel,
+.photo-toolbar,
+.photo-map-toolbar {
+  border-color: var(--cyberos-hud-line);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.photo-query-panel {
+  box-shadow: inset 0 -3px 0 rgb(255 0 60 / 10%);
+}
+
+.photo-view-switch,
+.photo-condition-mode,
+.photo-search-field,
+.photo-common-filters .photo-location-filter,
+.photo-sort-field > button,
+.photo-common-filters input,
+.photo-condition-row input {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--input-bg);
+}
+
+.photo-view-switch button[aria-selected="true"],
+.photo-condition-mode button[aria-pressed="true"],
+.photo-keyword-facets button[aria-pressed="true"] {
+  border-color: var(--cyber-red);
+  color: var(--cyber-ink);
+  background: var(--cyber-yellow);
+  box-shadow: inset 4px 0 0 var(--cyber-red);
+}
+
+.photo-timeline,
+.photo-map-view,
+.photo-map-canvas,
+.photo-coordinate-canvas,
+.photo-lightbox,
+.photo-lightbox-media,
+.preview-surface,
+.editor-code-surface,
+.terminal-surface,
+.local-terminal-frame,
+.workspace-terminal-frame {
+  color: var(--preview-text);
+  background: var(--cyber-ink);
+}
+
+.photo-lightbox-meta,
+.photo-metadata-inspector,
+.preview-sidebar {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--surface);
+}

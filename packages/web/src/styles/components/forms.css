@@ -1,0 +1,56 @@
+/* Shared fields own visual treatment; feature styles own their grid placement. */
+:where(.form-field, .create-form-field, .settings-field, .iscsi-field, .music-field) {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+:where(.form-field, .create-form-field, .settings-field, .iscsi-field, .music-field, .management-dialog, .workspace-search-field, .system-wifi-dialog) :where(input:not(.custom-select-validation):not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--field-height);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--input-bg);
+  font: inherit;
+}
+
+@media (max-width: 1040px), (pointer: coarse) {
+  :where(.form-field, .create-form-field, .settings-field, .iscsi-field, .music-field, .management-dialog, .workspace-search-field, .system-wifi-dialog) :where(input:not(.custom-select-validation):not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea) {
+    min-height: 44px;
+  }
+}
+
+.app-shell :where(input, textarea, .custom-select-trigger) {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--input-bg);
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+.app-shell :where(input, textarea, .custom-select-trigger):hover:not(:disabled) {
+  border-color: var(--cyberos-color-border-emphasis);
+}
+
+.app-shell :where(input, textarea, .custom-select-trigger):focus-visible,
+.custom-select.is-open .custom-select-trigger {
+  border-color: var(--control-focus);
+  box-shadow: inset 3px 0 0 var(--control-focus);
+}
+
+.app-shell :where(input, textarea)::placeholder {
+  color: var(--muted-2);
+  opacity: 1;
+}
+
+.field-error {
+  color: var(--danger-text);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}

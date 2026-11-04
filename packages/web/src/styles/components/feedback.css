@@ -1,0 +1,50 @@
+.error-message,
+.music-error,
+.video-error,
+.playback-error,
+.create-form-error,
+.iscsi-error,
+.storage-file-picker-error,
+.share-add-form-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--danger-border);
+  color: var(--danger-text);
+  background: var(--danger-bg-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+:is(.error-message, .music-error, .video-error, .playback-error, .create-form-error, .iscsi-error) > svg {
+  flex: 0 0 auto;
+}
+
+.empty-state,
+.preview-empty,
+.workspace-empty-state,
+.management-empty,
+.music-empty,
+.video-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 32px 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+:is(.empty-state, .preview-empty, .workspace-empty-state, .management-empty, .music-empty, .video-empty) :is(strong, h3) {
+  color: var(--text);
+}
+
+.metadata {
+  min-width: 0;
+  color: var(--muted-2);
+  font: 11px var(--font-mono);
+  overflow-wrap: anywhere;
+}

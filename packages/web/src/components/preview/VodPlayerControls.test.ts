@@ -88,7 +88,7 @@ describe("VodPlayerControls", () => {
     }));
     expect(html).toContain("Audio track");
     expect(html).toContain("Stereo · ENG");
-    expect(html).toContain("Subtitles off");
+    expect(html).toContain("Subtitle track");
     expect(html).toContain("简体中文 · ZHO");
   });
 });

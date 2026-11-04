@@ -1,0 +1,133 @@
+.photo-query-panel {
+  border-bottom: 2px solid var(--cyber-ink);
+}
+
+.photo-search-field,
+.photo-view-switch,
+.photo-condition-mode,
+.photo-common-filters input,
+.photo-condition-row input,
+.photo-common-filters .photo-location-filter,
+.photo-filter-menu {
+  border-color: var(--cyber-ink);
+  border-radius: 0;
+  color: var(--cyber-ink);
+  background: #fff72e;
+}
+
+.photo-view-switch button[aria-selected="true"],
+.photo-condition-mode button[aria-pressed="true"],
+.photo-filter-trigger.is-active {
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+  box-shadow: inset 0 -3px 0 var(--cyber-red);
+}
+
+.photo-runtime-alert,
+.photo-selection-actions,
+.photo-query-summary {
+  border: 1px solid var(--cyber-ink);
+  border-radius: 0;
+}
+
+.photo-runtime-alert[data-tone="danger"] {
+  border-color: var(--cyber-red);
+  color: var(--cyber-ink);
+  background: var(--cyber-red);
+}
+
+.photo-runtime-alert.is-open {
+  border-color: var(--cyber-cyan);
+  box-shadow: inset 0 -3px 0 var(--cyber-cyan);
+}
+
+.photo-runtime-alert-details {
+  border-color: var(--cyber-red);
+  color: var(--cyber-white);
+  background: var(--cyber-ink);
+  box-shadow: 8px 8px 0 rgb(255 0 60 / 28%);
+}
+
+.photo-runtime-alert-details[data-tone="warning"] {
+  border-color: var(--cyber-yellow);
+  box-shadow: 8px 8px 0 rgb(252 238 10 / 18%);
+}
+
+.photo-runtime-alert-heading strong {
+  color: var(--cyber-yellow);
+}
+
+.photo-runtime-alert-details[data-tone="danger"] .photo-runtime-alert-heading strong {
+  color: var(--cyber-red);
+}
+
+.photo-runtime-alert-heading button:hover,
+.photo-runtime-alert-heading button:focus-visible {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-cyan);
+}
+
+.photo-library-content,
+.photo-timeline {
+  background: var(--cyber-ink);
+}
+
+.photo-day > header {
+  border-bottom: 1px solid rgb(252 238 10 / 35%);
+  color: var(--cyber-yellow);
+}
+
+.photo-day > header span {
+  color: rgb(252 238 10 / 58%);
+}
+
+.photo-tile {
+  border: 1px solid rgb(252 238 10 / 22%);
+  border-radius: 0;
+  background: #101920;
+}
+
+.photo-tile:hover {
+  border-color: var(--cyber-cyan);
+  box-shadow: 0 0 0 2px var(--cyber-cyan);
+}
+
+.photo-tile.is-selected {
+  border-color: var(--cyber-red);
+  box-shadow: inset 0 0 0 4px var(--cyber-red);
+}
+
+.photo-name,
+.photo-media-badge,
+.photo-select {
+  border-radius: 0;
+  color: var(--cyber-yellow);
+  background: rgb(5 10 14 / 88%);
+}
+
+.photo-select[aria-pressed="true"] {
+  color: var(--cyber-ink);
+  background: var(--cyber-red);
+}
+
+.photo-map-view,
+.photo-map-canvas,
+.photo-coordinate-canvas {
+  border-color: var(--cyber-yellow);
+  border-radius: 0;
+}
+
+.photo-lightbox-tools button,
+.photo-lightbox-nav {
+  border: 1px solid rgb(252 238 10 / 48%);
+  border-radius: 0;
+  color: var(--cyber-yellow);
+  background: var(--cyber-ink);
+}
+
+.photo-lightbox-tools button:hover,
+.photo-lightbox-nav:hover {
+  border-color: var(--cyber-cyan);
+  color: var(--cyber-ink);
+  background: var(--cyber-cyan);
+}

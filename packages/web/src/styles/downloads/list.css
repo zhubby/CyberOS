@@ -1,0 +1,364 @@
+.workspace-management {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  background: var(--footer-bg);
+}
+
+.workspace-stage[data-panel="downloads"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.http-downloader-panel {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.download-header-stat {
+  display: grid;
+  gap: 1px;
+  min-width: 58px;
+  padding: 0 8px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.download-header-stat strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.1;
+}
+
+.download-header-stat[data-state="ready"] strong {
+  color: var(--green);
+}
+
+.download-header-stat[data-state="stale"] strong {
+  color: var(--yellow);
+}
+
+.download-header-stat[data-state="unavailable"] strong {
+  color: var(--red);
+}
+
+.download-header-stat span {
+  color: var(--muted-2);
+  font-size: 10px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.download-create-button {
+  color: var(--accent-soft-text);
+}
+
+.download-create-button:disabled {
+  border-color: var(--line);
+  color: var(--muted-2);
+  background: var(--subtle-bg);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.downloads-toolbar-meta,
+.downloads-summary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.downloads-toolbar-meta {
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.downloads-summary {
+  gap: 2px;
+}
+
+.downloads-summary .download-header-stat:first-child {
+  border-left: 0;
+}
+
+.downloads-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.downloads-filters {
+  display: flex;
+  min-width: 0;
+  gap: 3px;
+}
+
+.downloads-filters button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+}
+
+.downloads-filters button:hover,
+.downloads-filters button:focus-visible,
+.downloads-filters button.is-active {
+  border-color: var(--line);
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.downloads-list {
+  min-height: 0;
+  overflow: auto;
+  background: var(--footer-bg);
+}
+
+.downloads-toolbar-skeleton,
+.downloads-list-skeleton {
+  pointer-events: none;
+  animation: management-skeleton-enter 280ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.downloads-filters-skeleton .management-skeleton-block {
+  flex: 0 0 auto;
+  height: 28px;
+  border-radius: 4px;
+}
+
+.downloads-summary-skeleton .download-header-stat {
+  align-content: center;
+  gap: 5px;
+}
+
+.downloads-summary-skeleton .management-skeleton-block:first-child {
+  height: 13px;
+}
+
+.downloads-summary-skeleton .management-skeleton-block:last-child {
+  height: 8px;
+}
+
+.download-task-row-skeleton {
+  pointer-events: none;
+  animation: management-skeleton-row-enter 320ms cubic-bezier(.2, .72, .2, 1) both;
+}
+
+.download-task-row-skeleton:nth-child(2) { animation-delay: 45ms; }
+.download-task-row-skeleton:nth-child(3) { animation-delay: 90ms; }
+.download-task-row-skeleton:nth-child(4) { animation-delay: 135ms; }
+.download-task-row-skeleton:nth-child(5) { animation-delay: 180ms; }
+
+.download-skeleton-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.download-skeleton-status {
+  width: 54px;
+  height: 20px;
+}
+
+.download-skeleton-progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 2px;
+}
+
+.download-skeleton-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+}
+
+.download-skeleton-meta .management-skeleton-block {
+  height: 9px;
+}
+
+.download-skeleton-action {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+
+.download-task-row {
+  --download-actions-width: 132px;
+  --download-status-text: var(--neutral-status-text);
+  --download-status-fill: var(--neutral-status-text);
+  --download-status-bg: var(--neutral-status-bg);
+  --download-status-border: var(--line);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--download-actions-width);
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  transition: background-color 180ms var(--control-easing), border-color 180ms var(--control-easing);
+}
+
+.download-task-row[data-status="queued"] {
+  --download-status-text: var(--neutral-status-text);
+  --download-status-fill: var(--neutral-status-text);
+  --download-status-bg: var(--neutral-status-bg);
+  --download-status-border: var(--line);
+}
+
+.download-task-row[data-status="running"] {
+  --download-status-text: var(--accent-soft-text);
+  --download-status-fill: var(--accent);
+  --download-status-bg: var(--accent-soft-bg);
+  --download-status-border: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.download-task-row[data-status="seeding"] {
+  --download-status-text: var(--teal-text);
+  --download-status-fill: var(--teal-text);
+  --download-status-bg: var(--teal-bg);
+  --download-status-border: color-mix(in srgb, var(--teal-text) 45%, var(--line));
+}
+
+.download-task-row[data-status="paused"] {
+  --download-status-text: var(--warning-text);
+  --download-status-fill: var(--yellow);
+  --download-status-bg: var(--warning-bg);
+  --download-status-border: color-mix(in srgb, var(--yellow) 45%, var(--line));
+}
+
+.download-task-row[data-status="completed"] {
+  --download-status-text: var(--success-text);
+  --download-status-fill: var(--green);
+  --download-status-bg: var(--success-bg);
+  --download-status-border: color-mix(in srgb, var(--green) 45%, var(--line));
+}
+
+.download-task-row[data-status="failed"] {
+  --download-status-text: var(--danger-text);
+  --download-status-fill: var(--red);
+  --download-status-bg: var(--danger-bg);
+  --download-status-border: var(--danger-border);
+}
+
+.download-task-row[data-status="cancelled"] {
+  --download-status-text: var(--teal-text);
+  --download-status-fill: var(--teal-text);
+  --download-status-bg: var(--teal-bg);
+  --download-status-border: color-mix(in srgb, var(--teal-text) 45%, var(--line));
+}
+
+.download-task-main {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.download-task-heading {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.download-task-icon {
+  display: grid;
+  place-items: center;
+  color: var(--download-status-text);
+  transition: color 180ms var(--control-easing);
+}
+
+.download-task-heading > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.download-task-heading strong,
+.download-task-heading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-task-heading strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.download-task-heading > div > span {
+  color: var(--muted-2);
+  font-size: 11px;
+}
+
+.download-task-status {
+  padding: 3px 6px;
+  border: 1px solid var(--download-status-border);
+  border-radius: 3px;
+  color: var(--download-status-text);
+  background: var(--download-status-bg);
+  font-size: 10px;
+  font-family: var(--font-emphasis);
+  font-weight: 800;
+  text-transform: uppercase;
+  transition:
+    color 180ms var(--control-easing),
+    background-color 180ms var(--control-easing),
+    border-color 180ms var(--control-easing);
+}
+
+.download-task-path {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--code-font-family);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--download-status-fill) 18%, var(--line));
+  transition: background-color 180ms var(--control-easing);
+}
+
+.download-progress-track > span {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: var(--download-status-fill);
+  transition:
+    width 420ms cubic-bezier(0.2, 0, 0, 1),
+    background-color 180ms var(--control-easing);
+}
+
+.download-progress-track.is-indeterminate > span::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 60%;
+  content: "";
+  background: rgb(255 255 255 / 30%);
+  transform: skewX(-18deg);
+  animation: download-progress-sheen 1.5s ease-in-out infinite;
+}
+
+@keyframes download-progress-sheen {
+  to {
+    transform: translateX(260%) skewX(-18deg);
+  }
+}
