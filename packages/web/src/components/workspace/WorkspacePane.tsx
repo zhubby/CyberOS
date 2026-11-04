@@ -58,7 +58,6 @@ const MusicLibraryPanel = lazy(() => import("../music/MusicLibraryPanel.js").the
 const PhotoLibraryPanel = lazy(() => import("./PhotoLibraryPanel.js").then((module) => ({ default: module.PhotoLibraryPanel })));
 import { SkeletonBlock } from "./ManagementSkeleton.js";
 import { PanelHeader, PanelHeaderAction, PanelHeaderActions } from "./PanelHeader.js";
-import type { CodeFontSettings } from "../../lib/editor-settings.js";
 import { StorageFilePickerDialog } from "./StorageFilePickerDialog.js";
 import { FilePreviewDialog } from "./FilePreviewDialog.js";
 const MonitoringPanel = lazy(() => import("./MonitoringPanel.js").then((module) => ({ default: module.MonitoringPanel })));
@@ -392,7 +391,6 @@ export function WorkspacePane({
   vmOperations,
   operationsReady,
   locale,
-  codeFontSettings,
   filesPanelActivationId,
   onSelectStoragePool,
   onOpenDownloadedDirectory,
@@ -464,7 +462,6 @@ export function WorkspacePane({
   vmOperations: VmOperation[];
   operationsReady: boolean;
   locale: SupportedLocale;
-  codeFontSettings: CodeFontSettings;
   filesPanelActivationId: number;
   onSelectStoragePool: (poolId: string) => void;
   onOpenDownloadedDirectory: (storagePoolId: string, path: string) => void;
@@ -1738,7 +1735,6 @@ export function WorkspacePane({
             <Suspense fallback={activePanel === "terminal" && workspaceVisible ? <MobileAppLoading app="terminal" /> : null}>
               <LocalTerminalPanel
                 active={activePanel === "terminal" && workspaceVisible}
-                codeFontSettings={codeFontSettings}
               />
             </Suspense>
           ) : null}

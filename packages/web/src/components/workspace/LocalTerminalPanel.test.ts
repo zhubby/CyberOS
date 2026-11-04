@@ -49,8 +49,7 @@ describe("LocalTerminalPanel", () => {
     await initI18n();
     await i18n.changeLanguage("en");
     const html = renderToStaticMarkup(createElement(LocalTerminalPanel, {
-      active: true,
-      codeFontSettings: { familyId: "system", fontSizePx: 12 }
+      active: true
     }));
 
     expect(html).toContain('class="management-header app-titlebar workspace-terminal-overview"');
@@ -66,8 +65,7 @@ describe("LocalTerminalPanel", () => {
     await initI18n();
     await i18n.changeLanguage("en");
     const html = renderToStaticMarkup(createElement(LocalTerminalPanel, {
-      active: true,
-      codeFontSettings: { familyId: "system", fontSizePx: 12 }
+      active: true
     }));
 
     expect(html).toContain('aria-busy="true"');

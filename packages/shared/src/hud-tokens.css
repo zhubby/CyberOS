@@ -1,5 +1,15 @@
 /* CyberOS HUD primitives: shared by the Web app, TV shell, and documentation. */
 
+/* Fontsource share-tech-mono 5.3.0; SIL OFL 1.1, see fonts/share-tech-mono.LICENSE. */
+@font-face {
+  font-family: "Share Tech Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("./fonts/share-tech-mono-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* Primitive colors */
   --cyberos-hud-void: #050a0e;
@@ -30,7 +40,7 @@
   /* Primitive type, spacing, motion, and geometry */
   --cyberos-font-ui: "Rajdhani", "Noto Sans SC Variable", "Noto Sans SC", sans-serif;
   --cyberos-font-body: "Noto Sans SC Variable", "Noto Sans SC", "Rajdhani", sans-serif;
-  --cyberos-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --cyberos-font-mono: "Share Tech Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --cyberos-hud-space-1: 4px;
   --cyberos-hud-space-2: 8px;
   --cyberos-hud-space-3: 12px;

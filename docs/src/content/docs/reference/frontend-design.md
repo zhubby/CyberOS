@@ -124,11 +124,11 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 
 ### 字体
 
-字体通过 Fontsource 自托管：
+字体通过 Fontsource 自托管；Share Tech Mono 的 WOFF2 与 SIL OFL 1.1 许可保存在 `packages/shared/src/fonts/`，由共享 HUD 样式加载并随三端静态资源打包：
 
 - 主 Web、TV 导航、标题、按钮和数字层级：`Rajdhani` 的 `400/500/600/700`，中文回退到 `Noto Sans SC Variable`。
 - 文档导航和标题使用 `Rajdhani`；长文正文优先使用 `Noto Sans SC Variable`，保证中英文连续阅读。
-- 技术元数据、路径、代码和终端：`JetBrains Mono Variable`，保留用户配置代码字体和字号的能力。
+- 技术元数据、路径、代码和终端统一使用 `Share Tech Mono`（400），缺失字符回退到系统字体；代码区域默认字号为 `12px`。不提供浏览器级字体或字号设置，也不读取旧的字体本地存储值。
 - 三端不使用 Inter、Newsreader 或 Noto Serif SC，字体均由 Fontsource 自托管。
 
 正文通常为 `12-14px`；面板标题通常为 `17-22px`。标题、页签和命令可使用大写英文；中文保持原文，不增加字距。任何字号都不得随视口宽度连续缩放。
@@ -309,7 +309,7 @@ CyberOS 是个人 Linux NAS 的本地控制系统。界面要像可操作的设�
 
 任何 Web、TV 或文档 UI 变更在交付前检查：
 
-1. 是否复用深色 HUD 令牌、Rajdhani / Noto Sans SC / JetBrains Mono 字体角色和零圆角几何？
+1. 是否复用深色 HUD 令牌、Rajdhani / Noto Sans SC / Share Tech Mono 字体角色和零圆角几何？
 2. 是否覆盖 default、hover、active、selected、focus、disabled、busy、error？
 3. 是否在中文、英文和 `prefers-reduced-motion` 下检查文本、动效和状态表达？
 4. 是否在 `1440/820/560/390/320px` 检查重叠、页面级横向溢出、触控区域和长文本？
