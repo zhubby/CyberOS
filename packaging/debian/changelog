@@ -1,3 +1,9 @@
+cyberos (2.2.13) unstable; urgency=medium
+
+  * Keep shared field focus visible when the pointer hovers over focused workspace and modal editor inputs.
+
+ -- CyberOS Maintainers <maintainers@cyberos.local>  Wed, 04 Nov 2026 10:01:02 +0000
+
 cyberos (2.2.12) unstable; urgency=medium
 
   * Split frontend styles by responsibility and unify shared Web and TV controls, modal actions and field focus.
